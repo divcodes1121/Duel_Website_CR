@@ -1383,6 +1383,62 @@ def player_decks(tag: str, since: str | None = None, until: str | None = None,
     return out
 
 
+def window_lists(since: str | None = None, until: str | None = None, *,
+                 min_games: int = 10, min_players: int = 3,
+                 max_share: float = 0.5) -> dict[str, list]:
+    """`{deck key: [games, wins, pilots, archetype]}` — EVERY list fielded in a
+    native duel (clan-war and friendly) with `since <= battle_time < until`,
+    by anybody, that `min_games` games and `min_players` pilots stand behind
+    and no one pilot holds more than `max_share` of.
+
+    Team Analysis' pool since 7.1 (2026-10-27, "there are literally hundreds and
+    thousands of decks in duels"): the lists duel players bring NOW, not the
+    catalogue of every list ever (`catalogue`) nor one group's (`group_window`).
+    Read on `games_mode_duel`, one mode at a time. `{}` with no usable index."""
+    if _current() is None:
+        return {}
+    lo, hi = since or "", until or "~"
+    per: dict[str, list] = {}
+    try:
+        con = _ro(PATH)
+        try:
+            for mode in sorted(_dx().NATIVE_DUEL_MODES):
+                for a_deck, b_deck, a_tag, b_tag, winner in con.execute(
+                        "SELECT a_deck, b_deck, a_tag, b_tag, winner FROM games "
+                        "WHERE mode = ? COLLATE NOCASE AND battle_time >= ? AND battle_time < ?",
+                        (mode, lo, hi)):
+                    for deck, tag, won in ((a_deck, a_tag, winner == 1), (b_deck, b_tag, winner == 2)):
+                        e = per.get(deck)
+                        if e is None:
+                            e = per[deck] = [0, 0, {}]
+                        e[0] += 1
+                        e[1] += 1 if won else 0
+                        e[2][tag] = e[2].get(tag, 0) + 1
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    merged: dict[str, list] = {}
+    for k, (n, w, who) in per.items():
+        key = ",".join(sorted(k.split(",")))
+        e = merged.get(key)
+        if e is None:
+            merged[key] = [n, w, dict(who)]
+        else:                       # one list stored in two card orders
+            e[0] += n
+            e[1] += w
+            for tg, c in who.items():
+                e[2][tg] = e[2].get(tg, 0) + c
+    out: dict[str, list] = {}
+    for key, (n, w, who) in merged.items():
+        if n < min_games or len(who) < min_players or len(set(key.split(","))) != 8:
+            continue
+        if max(who.values()) > max_share * n:
+            continue
+        out[key] = [n, w, len(who), classify(key)]
+    return out
+
+
 def lists_of(tags) -> dict[str, list[int]]:
     """`{deck key: [games, pilots]}` over every stored duel game of `tags` —
     the lists a NAMED GROUP of players fielded in duels (Team Analysis offers

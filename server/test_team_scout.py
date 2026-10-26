@@ -1477,6 +1477,16 @@ def property_each_archetype_floor():
     e2 = p_row("E", {"hog": 60, "giant": 60, "graveyard": 48}, "mortar")
     capped = [r["name"] for r in ts.counters([a, c, d, f, e2], plays, each_min=3, **kw)]
     check("...and keeps to one list of a win condition", capped == ["F", "D", "C"], str(capped))
+    # 7.1: EVERY OTHER WIN CONDITION'S CLOSEST LIST, down to `EACH_NEAR`. G (a
+    # Sparky list) is worst 47, C 46, A 40: A has a hole and stays off.
+    g2 = p_row("G", {"hog": 70, "giant": 47, "graveyard": 60}, "sparky")
+    wide = ts.counters([a, c, d, f, g2], plays, each_min=10, each_near=ts.EACH_NEAR, **kw)
+    wn = [(r["name"], r["allArchetypes"]) for r in wide]
+    check("every other win condition fills the list, the closest first, none with a hole",
+          wn == [("F", True), ("D", True), ("G", False), ("C", False)], str(wn))
+    check("`EACH_NEAR` is the hole line", ts.EACH_NEAR == ts.WORST_FLOOR == 45.0)
+    check("without the line the deck with a hole would have been listed",
+          "A" in [r["name"] for r in ts.counters([a, c, d, f, g2], plays, each_min=10, **kw)])
 
     rare = [{"family": "hog", "share": 0.60}, {"family": "giant", "share": 0.37},
             {"family": "graveyard", "share": 0.03}]
@@ -1520,6 +1530,16 @@ def property_each_archetype_floor():
     check("given the shares the screen shows, a teammate must beat only the families on it "
           "(Graveyard at 3% is not one: A is back)",
           "A" in [r["name"] for r in shown["#H1"]], str([r["name"] for r in shown["#H1"]]))
+    # 7.1: decks that can never be listed are dropped before a teammate's rows
+    # are built; the lists must be exactly what they would have been.
+    _g2 = p_row("G", {"hog": 70, "giant": 47, "graveyard": 60}, "sparky")
+    _kw7 = dict(limit=10, new_slots=10, each_floor=ts.EACH_FLOOR, each_min=10,
+                each_near=ts.EACH_NEAR)
+    with_dead, _ = ts.personal_plan(players, [a, c, d, f, _g2], SQ_THREATS, **_kw7)
+    without, _ = ts.personal_plan(players, [c, d, f, _g2], SQ_THREATS, **_kw7)
+    check("a deck that can never reach the list changes nothing by being in the pool",
+          [r["key"] for r in with_dead["#H1"]] == [r["key"] for r in without["#H1"]]
+          and len(without["#H1"]) == 4, str([r["name"] for r in with_dead["#H1"]]))
     skilled = [dict(players[0], shift={"hog-rider": 0.9})]
     sk, _ = ts.personal_plan(skilled, pool, SQ_THREATS, limit=5, new_slots=5,
                              each_floor=ts.EACH_FLOOR)

@@ -2765,6 +2765,9 @@ export interface TeamRecommendation {
   /** 6.1: how many of the live top 1,000 ranked players used this list in the
    *  window, their ranked games with it and how many they won. */
   top?: { players: number; games: number; wins: number };
+  /** 7.1: its record in the window's native duels (anybody's): games, wins,
+   *  how many players brought it. */
+  duelList?: { games: number; wins: number; pilots: number };
   /** Its rank among the window's most played lists (5.0), 1 = most played. */
   metaRank?: number;
   /** Its win condition, as `player_skill` names one (a card key). */

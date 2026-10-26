@@ -1152,7 +1152,7 @@ class _Candidate:
 
     __slots__ = ("cards", "key", "archetype", "name", "art", "inferred", "owner",
                  "games", "wins", "win_rate", "use_rate", "profile", "origin", "memo",
-                 "field", "act", "crl", "meta_rank", "wincon", "family", "top")
+                 "field", "act", "crl", "meta_rank", "wincon", "family", "top", "duelw")
 
     def __init__(self, deck: dict, owner: dict | None, profile: "_DeckProfile"):
         # WHEN THE LIST WAS PLAYED, for a pool candidate: `{age in days:
@@ -1192,6 +1192,9 @@ class _Candidate:
         # 6.1: `[players, games, wins]` of the top 1,000 ranked players with
         # this list in the window (`top_decks`). None when they did not play it.
         self.top = None
+        # 7.1: `[games, wins, pilots]` in native duels in the window
+        # (`duel_index.window_lists`), anybody's. None when not one of them.
+        self.duelw = None
         # Its win condition as `player_skill` names one: the key a player's
         # record with it is kept under.
         self.wincon = _wincon(self.cards)
@@ -2076,12 +2079,22 @@ TOP_MIN_PLAYERS = 3
 TOP_MIN_GAMES = 30
 #: The most used lists of each win condition that join.
 #:
-#: MEASURED AND KEPT AT 10 (7.0, 2026-10-27): widening it so more lists can
-#: win every matchup an opponent plays (`team_scout.EACH_FLOOR`). On 20 real
-#: opponents, warm: 10 -> pool 271, 8.0 s, a median of 4 listed decks beating
-#: every family, 5 opponents with fewer than 3; 20 -> 402, 9.3 s, the same 4
-#: and 5; 40 -> 582, 18.6 s, 5 and 4. Twice the wait for one deck more.
-TOP_PER_FAMILY = 10
+#: 10 in 6.1 and 7.0; EVERY ELIGIBLE LIST since 7.1 (2026-10-27). 7.0 lists
+#: only decks that beat every family an opponent plays, and on a pool of 242
+#: that left four or five decks a folder — "now it shows only 4-5 decks, I need
+#: multiple win cons ... there are literally hundreds and thousands of decks
+#: in duels and the top 1k ladder". 763 lists clear the two bars above on a
+#: 30-day window; all of them join, with the window's duel lists
+#: (`DUEL_LIST_MIN_GAMES`).
+TOP_PER_FAMILY = 1000
+
+#: 7.1: EVERY LIST PLAYED IN DUELS IN THE WINDOW — clan-war and friendly, by
+#: anybody — with this many games, this many pilots, and no pilot holding more
+#: than `DUEL_LIST_MAX_SHARE` of them (`duel_index.window_lists`): 1,262 lists
+#: on a 30-day window (2026-10-27), 25 families.
+DUEL_LIST_MIN_GAMES = 10
+DUEL_LIST_MIN_PILOTS = 3
+DUEL_LIST_MAX_SHARE = 0.5
 
 #: HOW OFTEN THE TOP PLAYERS USE A LIST, in the choosing ("set the frequency
 #: like that"): `TOP_USE_WEIGHT` points per doubling of the top players (or
@@ -2098,7 +2111,9 @@ def use_bonus(card) -> float:
     import math
     top = getattr(card, "top", None)
     crl = getattr(card, "crl", None)
-    users = (top[0] if top else 0) or (crl[2] if crl and len(crl) > 2 else 0)
+    duel = getattr(card, "duelw", None)
+    users = max(top[0] if top else 0, crl[2] if crl and len(crl) > 2 else 0,
+                duel[2] if duel else 0)
     if not users:
         return 0.0
     return round(min(TOP_USE_CAP, TOP_USE_WEIGHT * math.log2(1 + users)), 2)
@@ -2325,6 +2340,21 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
     for key, (n, w, pilots) in crl.items():
         e = wanted.setdefault(key, {"arch": None, "meta": None, "state": None})
         e["crl"] = [n, w, pilots]
+    duelw: dict = {}
+    if _duel_index is not None and hasattr(_duel_index, "window_lists"):
+        try:
+            duelw = _duel_index.window_lists(
+                lo, hi, min_games=DUEL_LIST_MIN_GAMES, min_players=DUEL_LIST_MIN_PILOTS,
+                max_share=DUEL_LIST_MAX_SHARE)
+        except Exception:  # noqa: BLE001 - the other halves still stand
+            traceback.print_exc()
+            duelw = {}
+    for key, (n, w, pilots, arch) in duelw.items():
+        e = wanted.setdefault(key, {"arch": None, "meta": None, "state": None})
+        if not e.get("arch"):
+            e["arch"] = arch
+        e["duel"] = [n, w, pilots]
+    info["duelWindowLists"] = len(duelw)
 
     todo = []
     info["synergySkipped"] = 0
@@ -2360,9 +2390,11 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
             "cards": cards, "art": art, "inferredArt": inferred,
             "winCondition": arch, "name": cd.deck_title(arch, cards),
             "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
-            "origin": "top" if e.get("top") else "crl" if e.get("crl") else "meta"},
+            "origin": ("top" if e.get("top") else "crl" if e.get("crl")
+                       else "duel" if e.get("duel") else "meta")},
             None, prof)
         c.crl = e.get("crl")
+        c.duelw = e.get("duel")
         c.meta_rank = e.get("meta")
         c.top = e.get("top")
         out.append(c)
@@ -2373,6 +2405,7 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
     info["crlLists"] = sum(1 for c in out if c.crl)
     info["crlGames"] = sum((c.crl or [0])[0] for c in out)
     info["metaLists"] = sum(1 for c in out if c.meta_rank)
+    info["duelLists"] = sum(1 for c in out if c.duelw)
     info["topLists"] = sum(1 for c in out if c.top)
     info["pool"] = len(out)
     info["metaStates"] = counts
@@ -2748,7 +2781,9 @@ class _DuelContext:
 #: teammate's own lists — kept between requests. A history moves only as fast
 #: as the bot writes, and the cells beside it are rebuilt every four hours, so
 #: an hour is the same order of staleness.
-HISTORY_CACHE = 1024
+#: 1024 until 7.1; the pool's ~1,500 lists outside the version cells thrashed
+#: it, and every request re-read their histories.
+HISTORY_CACHE = 4096
 HISTORY_TTL_S = 3600.0
 _HISTORY: "OrderedDict[str, tuple[float, dict]]" = OrderedDict()
 _HISTORY_LOCK = threading.Lock()
@@ -2780,6 +2815,67 @@ def _ladder_history(key: str) -> dict | None:
         while len(_HISTORY) > HISTORY_CACHE:
             _HISTORY.popitem(last=False)
     return hist
+
+
+_HIST_INDEX: "OrderedDict[str, tuple]" = OrderedDict()
+
+
+def _history_index(key: str) -> tuple[dict, dict] | None:
+    """`(history, {7-card subset: [games, wins]})` for one list, cached as long
+    as its history (7.1).
+
+    THE FAMILY LEVEL, PRECOMPUTED. A list's family record against a threat is
+    its games against every opponent list sharing seven or more cards with the
+    threat. Two lists share seven cards exactly when they share one of the
+    eight 7-card subsets, and an opponent list sharing EXACTLY seven shares
+    exactly one; the threat itself shares all eight. So the record is the sum
+    over the threat's eight subsets of what the history holds under each, less
+    seven times its games against the threat itself — eight lookups a threat,
+    where `prepare` used to slice every opponent list in the history again for
+    every opponent (1.1M slicings a ten-opponent board, measured 2026-10-27).
+    `prepare_reference` keeps the old loop; a test holds the two equal."""
+    hist = _ladder_history(key)
+    if hist is None:
+        return None
+    now = time.monotonic()
+    with _HISTORY_LOCK:
+        hit = _HIST_INDEX.get(key)
+        if hit is not None and hit[0] is hist:
+            _HIST_INDEX.move_to_end(key)
+            return hist, hit[1]
+    agg: dict[str, list] = {}
+    for opp, (n, w) in hist.items():
+        for sub in _duel_index._subs(opp):
+            a = agg.get(sub)
+            if a is None:
+                agg[sub] = [n, w]
+            else:
+                a[0] += n
+                a[1] += w
+    with _HISTORY_LOCK:
+        _HIST_INDEX[key] = (hist, agg, now)
+        while len(_HIST_INDEX) > HISTORY_CACHE:
+            _HIST_INDEX.popitem(last=False)
+    return hist, agg
+
+
+def _family_from_index(index: tuple[dict, dict] | None, tk: str, subs: list[str]) -> tuple | None:
+    """`(games, wins)` of a list against threat `tk`'s one-card family, off
+    `_history_index`; None when it never met that family."""
+    if not index:
+        return None
+    hist, agg = index
+    n = w = 0
+    for sub in subs:
+        a = agg.get(sub)
+        if a is not None:
+            n += a[0]
+            w += a[1]
+    exact = hist.get(tk)
+    if exact is not None:
+        n -= 7 * exact[0]
+        w -= 7 * exact[1]
+    return (n, w) if n > 0 else None
 
 
 class _FusionContext:
@@ -2910,6 +3006,38 @@ class _FusionContext:
         asks, because its threats are one opponent's own decks, most of which
         are in no cell; `rate` reads a prepared family only when the cells had
         nothing, so a hub against a threat hub still reads the cells."""
+        if not self.on:
+            return
+        tkeys = {scout.deck_key(t.get("cards")) for t in threats
+                 if len(set(t.get("cards") or [])) == 8}
+        want: dict[str, set] = {}
+        for c in cards:
+            if len(set(c.cards)) != 8 or (self.is_hub(c.key) and not hubs_too):
+                continue
+            missing = tkeys - self._fam_done.get(c.key, set())
+            if missing:
+                want[c.key] = missing
+        if not want:
+            return
+        keys = list(want)
+        indexes = dict(zip(keys, _POOL.map(_history_index, keys)))
+        subs_of: dict[str, list[str]] = {}
+        for key, missing in want.items():
+            acc = self._fam.setdefault(key, {})
+            index = indexes.get(key)
+            for tk in missing:
+                subs = subs_of.get(tk)
+                if subs is None:
+                    subs = subs_of[tk] = _duel_index._subs(tk)
+                got = _family_from_index(index, tk, subs)
+                if got is not None:
+                    acc[tk] = got
+            self._fam_done.setdefault(key, set()).update(missing)
+
+    def prepare_reference(self, cards, threats, *, hubs_too: bool = False) -> None:
+        """`prepare` as it was before 7.1: every opponent list in every history
+        sliced again for every request. Kept as the oracle `prepare` is tested
+        against; nothing in production calls it."""
         if not self.on:
             return
         tkeys = {scout.deck_key(t.get("cards")) for t in threats
@@ -3287,6 +3415,9 @@ def _finish(rows: list[dict], by_key: dict, threats: list[dict],
         top = getattr(cand, "top", None) if cand is not None else None
         if top:
             r["top"] = {"players": top[0], "games": top[1], "wins": top[2]}
+        dw = getattr(cand, "duelw", None) if cand is not None else None
+        if dw:
+            r["duelList"] = {"games": dw[0], "wins": dw[1], "pilots": dw[2]}
         if ctx is not None and ctx.on and projection:
             try:
                 r["duel"] = ctx.figures(r.get("cards"), projection)
@@ -3621,7 +3752,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                                                     per_wincon=MATE_PER_WINCON,
                                                     new_slots=PER_PLAYER_TOP_N,
                                                     each_floor=scout.EACH_FLOOR,
-                                                    each_min=scout.EACH_MIN,
+                                                    each_min=PER_PLAYER_TOP_N,
+                                                    each_near=scout.EACH_NEAR,
                                                     plays=plays)
             who = {m["tag"]: m["name"] for m in blue}
             for c in cover:
@@ -3642,7 +3774,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         return scout.counters(list(own) + extra, plays, limit=limit,
                               specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
-                              each_floor=scout.EACH_FLOOR, each_min=scout.EACH_MIN)
+                              each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
+                              each_near=scout.EACH_NEAR)
 
     per_player = []
     for mate in blue:
@@ -3685,7 +3818,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     else:
         recommended = scout.counters(scored, plays, limit=top_n, specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
-                              each_floor=scout.EACH_FLOOR, each_min=scout.EACH_MIN)
+                              each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
+                              each_near=scout.EACH_NEAR)
     recommended = finish(recommended)
     for r in recommended:
         if blue and not r.get("owner"):
@@ -3812,7 +3946,8 @@ def _combined(red: list[dict], cards: list[_Candidate],
     recommended = scout.counters(_distinct(scored), plays, limit=SCOUT_TOP_N,
                                  specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
-                              each_floor=scout.EACH_FLOOR, each_min=scout.EACH_MIN)
+                              each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
+                              each_near=scout.EACH_NEAR)
 
     # THE DUELS, ROSTER-WIDE: every opponent's own duel games pooled, for the
     # duel figures on each row.

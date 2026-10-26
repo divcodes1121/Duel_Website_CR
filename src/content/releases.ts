@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-27-every-win-condition',
+    date: '2026-10-27',
+    kind: 'improved',
+    title: 'Team Analysis: every win condition, from thousands of decks',
+    body: [
+      'Suggestions are now chosen from far more decks: every deck the top 1,000 ranked players use and every deck brought to duels in the days you picked, more than two thousand in all.',
+      'Decks that beat everything your opponent plays come first. After them, each other win condition shows its closest deck, marked “Closest”, as long as nothing the opponent plays beats it badly.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-27-every-archetype',
     date: '2026-10-27',
     kind: 'improved',

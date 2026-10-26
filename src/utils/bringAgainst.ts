@@ -251,7 +251,9 @@ export function chipLabels(folder: {
 
 /**
  * The pill on a "closest" row (brain 7.0): a deck that does NOT win every
- * archetype the opponent plays, listed only because fewer decks than three do.
+ * archetype the opponent plays. Since 7.1 every win condition with no list
+ * that does is offered its closest one (worst matchup 45%+), after the decks
+ * that win them all.
  * Null on every other row — a deck that wins them all says so with its chips.
  * `names` maps a family key to its display name (the folder's `plays`).
  */
@@ -269,7 +271,7 @@ export function closestPill(
       : undefined;
   return {
     label: 'Closest',
-    title: ['No deck in the pool wins every matchup against them.', worst]
+    title: ['Does not win every matchup against them.', worst]
       .filter(Boolean)
       .join(' '),
   };

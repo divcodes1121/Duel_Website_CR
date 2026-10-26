@@ -232,6 +232,20 @@ try:
           [d["key"] for d in di.player_decks("#P9", modes=fr)] == [di.deck_key(HOG_N)]
           and di.player_decks("#P0", modes=fr) == [],
           str(di.player_decks("#P0", modes=fr)))
+    # 7.1: EVERY LIST PLAYED IN DUELS IN A WINDOW, by anybody.
+    wl = di.window_lists(min_games=10, min_players=3)
+    check("window_lists: the lists 10+ duel games and 3+ pilots stand behind",
+          di.deck_key(MORTAR) in wl and di.deck_key(BAIT) in wl
+          and di.deck_key(HOG_N) not in wl and di.deck_key(HOG_X) not in wl,
+          str({k[:12]: v for k, v in wl.items()}))
+    check("...with games, wins, pilots and its archetype",
+          wl[di.deck_key(MORTAR)][0] >= 12 and wl[di.deck_key(MORTAR)][2] == 4
+          and wl[di.deck_key(MORTAR)][3] == di.classify(di.deck_key(MORTAR)),
+          str(wl.get(di.deck_key(MORTAR))))
+    check("...a list one pilot holds most of is not one",
+          di.deck_key(MORTAR) not in di.window_lists(min_games=1, min_players=1, max_share=0.2))
+    check("...and an empty window is nothing",
+          di.window_lists("~", None) == {})
     check("...in any case, and None is every mode",
           [d["key"] for d in di.player_decks("#P9", modes=("Duel_1v1_Friendly",))] == [di.deck_key(HOG_N)]
           and {d["key"] for d in di.player_decks("#P0", modes=None)} == set(decks))

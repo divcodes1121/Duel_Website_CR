@@ -1028,7 +1028,7 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 7.0", ts.BRAIN_VERSION == "team-scout-7.0" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 7.1", ts.BRAIN_VERSION == "team-scout-7.1" and folder["brain"] == ts.BRAIN_VERSION)
 
 # 7.0: EVERY ROW SAYS WHETHER IT BEATS EVERY FAMILY THEY PLAY — and the mark
 # survives the full re-rating of a chosen row (`_CHOSEN_KEYS`).
@@ -1495,6 +1495,12 @@ _saved_cp = ta._competitive_pool
 # The stub is the 4.1 window pool, so the window checks below keep testing
 # how a pool, its days and each list's play reach the rows.
 ta._competitive_pool = lambda days, until=None: ta._window_pool(days)
+# The fixture's Hog list has a hole against one of this opponent's families:
+# 7.1's "closest" line (`EACH_NEAR`) would drop it, and these checks are about
+# how a pool and its days reach the rows, not about the floors (which have
+# their own checks in test_team_scout). Off for this section, restored after.
+_saved_near = ts.EACH_NEAR
+ts.EACH_NEAR = 0.0
 _bring = ta.bring("#R1")
 check("bring() answers with what they play and the decks to bring",
       _bring["plays"] and _bring["decks"] and _bring["brain"] == ts.BRAIN_VERSION, str(_bring.get("reason")))
@@ -1782,6 +1788,7 @@ try:
           len(_cf) == 4 and _if["reason"] == "no_activity")
 finally:
     dix.activity, ta._today = _saved_win
+    ts.EACH_NEAR = _saved_near
     ta._reset_counter_pool()
 
 # THE CARD VIEW: the manual names the cards, the rated pool ranks the decks.
@@ -2200,6 +2207,57 @@ try:
     row_none = ta._score(card_a, _fx_threats, None)
     check("as it is with no context at all",
           [m["winRate"] for m in row_none["matchups"]] == [55.0, 55.0, 55.0])
+
+    # 7.1: THE INDEXED FAMILY LEVEL IS THE OLD LOOP'S, NUMBER FOR NUMBER.
+    # Random histories built around the threats — exact copies, one-card and
+    # two-card variants, strangers — against random threats; `prepare` and
+    # `prepare_reference` must leave the same (games, wins) everywhere.
+    import random as _r
+    _rng = _r.Random(11)
+    _pool_cards = [f"c{i}" for i in range(40)]
+
+    def _rand_deck():
+        return sorted(_rng.sample(_pool_cards, 8))
+
+    def _near(deck, k):
+        out = list(deck)
+        for _ in range(k):
+            i = _rng.randrange(8)
+            out[i] = _rng.choice([c for c in _pool_cards if c not in out])
+        return sorted(out)
+
+    _th = [_rand_deck() for _ in range(6)]
+    _cands_k = [_rand_deck() for _ in range(12)]
+    _hists = {}
+    for ck in _cands_k:
+        h = {}
+        for _ in range(60):
+            base = _rng.choice(_th)
+            d = _rng.choice([base, _near(base, 1), _near(base, 2), _rand_deck()])
+            k = ",".join(d)
+            n = _rng.randint(1, 30)
+            prev = h.get(k, [0, 0])
+            h[k] = [prev[0] + n, prev[1] + _rng.randint(0, n)]
+        _hists[",".join(ck)] = h
+    ta._ladder_history = lambda key: _hists.get(key)
+    ta._fusion = _saved[1]          # the switch-off check above turned it off
+    ta._HIST_INDEX.clear()
+    _thr = [{"key": f"r{i}", "cards": t, "archetype": "xbow", "likelihood": 1 / 6,
+             "evidence": ts.OBSERVED, "name": "X"} for i, t in enumerate(_th)]
+    _cs = [ta._Candidate({"cards": c, "winCondition": "hog", "name": "R"}, None,
+                         ta._DeckProfile(c, "hog")) for c in _cands_k]
+    _new = ta._FusionContext(None, None)
+    _old = ta._FusionContext(None, None)
+    _new.prepare(_cs, _thr)
+    _old.prepare_reference(_cs, _thr)
+    check("the indexed family level equals the old loop's, for every list and threat",
+          _new._fam == _old._fam and _new._fam_done == _old._fam_done
+          and sum(len(v) for v in _new._fam.values()) > 20,
+          f"{sum(len(v) for v in _new._fam.values())} cells")
+    _again = ta._FusionContext(None, None)
+    _again.prepare(_cs, _thr)
+    check("...and a second request reads the cached index to the same numbers",
+          _again._fam == _old._fam and len(ta._HIST_INDEX) == len(_cands_k))
 finally:
     ta._duel_index, ta._fusion, ta._ladder_history = _saved
 

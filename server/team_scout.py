@@ -359,7 +359,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-7.0"
+BRAIN_VERSION = "team-scout-7.1"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -1688,6 +1688,16 @@ EACH_SHARE = PLAYS_MIN_SHARE
 #: the closest decks come rather than an empty board.
 EACH_MIN = 3
 
+#: 7.1 (2026-10-27): a "closest" row's worst matchup must be at least this —
+#: `WORST_FLOOR`, the line under which a deck has a HOLE. Asked the same day as
+#: 7.0 shipped: "it shows only 4-5 decks, I need multiple win cons". Measured
+#: on 20 real opponents with the wide pool: a median of 5 win conditions have
+#: a list beating every family they play, 13 have one whose worst matchup is
+#: 45%+, 22.5 have one over 50% overall. Lists are filled with every other win
+#: condition's closest list down to this line, and no further: a deck one of
+#: their families beats 60-40 is not a suggestion.
+EACH_NEAR = WORST_FLOOR
+
 
 def _rate(row) -> float:
     return float(row.get("expectedWinRate") or 0.0)
@@ -1775,7 +1785,7 @@ def worst_case(vs, plays, *, share=WORST_SHARE):
 def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
              score_key="recommendationScore", first=None, adjust=None,
              specific=True, per_family=PER_ARCHETYPE, by_wincon=False,
-             floor_only=False, band=0.0, each_floor=None, each_min=0):
+             floor_only=False, band=0.0, each_floor=None, each_min=0, each_near=None):
     """The decks to bring: the strongest counters to what they play.
 
     `rows` are scored candidates (`score()`'s rows — each is copied, nothing
@@ -1822,7 +1832,8 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     in `plays` at `EACH_SHARE` or more are listed (`each_worst`), and the
     answer-swap below takes only such rows. When fewer than `each_min` clear
     it, the rows whose worst matchup is highest top the list up to
-    `each_min`, marked `allArchetypes: False`; every row that cleared it is
+    `each_min` (none whose worst matchup is under `each_near`, when given),
+    marked `allArchetypes: False`; every row that cleared it is
     marked `allArchetypes: True`. Each row carries `eachWorst` — its lowest
     rate over those families and which family — either way.
 
@@ -1959,7 +1970,8 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         # the reader nothing to bring.
         listed = {id(c) for c in chosen}
         near = [r for r in pool if id(r) not in listed and r is not lead
-                and _rate(r) >= FLOOR_RATE and r["eachWorst"]["rate"] is not None]
+                and _rate(r) >= FLOOR_RATE and r["eachWorst"]["rate"] is not None
+                and (each_near is None or r["eachWorst"]["rate"] >= each_near)]
         near.sort(key=lambda r: (-r["eachWorst"]["rate"], -r["_v"], r["key"]))
         for r in near:
             if len(chosen) >= min(each_min, limit):
@@ -2020,8 +2032,12 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     tail.sort(key=lambda r: (-_rate(r), -r["_v"], r["key"]))
     out = head + tail
     if each_floor is not None:
-        # The decks that win every matchup lead; the closest after them.
-        out = [c for c in out if c["_each"]] + [c for c in out if not c["_each"]]
+        # The decks that win every matchup lead, by their figure; the closest
+        # after them, the highest worst matchup first (7.1).
+        rest = [c for c in out if not c["_each"] and c is not (head[0] if head else None)]
+        rest.sort(key=lambda r: (-(r["eachWorst"]["rate"] if r["eachWorst"]["rate"] is not None else -1.0),
+                                 -_rate(r), r["key"]))
+        out = [c for c in out if c["_each"]] + rest
     for c in out:
         del c["_v"]
         if c.pop("_round"):
@@ -2477,7 +2493,7 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                   new_slots: int = NEW_SLOTS, share_max: int = SHARE_MAX,
                   min_list: int = MIN_LIST, per_wincon: int = PER_ARCHETYPE,
                   each_floor: float | None = None, each_min: int = 0,
-                  plays=None):
+                  plays=None, each_near: float | None = None):
     """Every teammate's list against ONE opponent, each built out of that
     teammate (5.0; see the section note).
 
@@ -2519,11 +2535,41 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
         plays = [{"family": p["family"], "share": float(p.get("share") or 0.0)} for p in plays]
     order = {p["tag"]: i for i, p in enumerate(players)}
 
+    # 7.1: A DECK THAT CAN NEVER BE LISTED FOR A TEAMMATE IS NOT COPIED FOR
+    # THEM. With `each_floor` a row is listed only when its worst matchup —
+    # after the teammate's record with its win condition, one log-odds shift
+    # applied to every matchup alike, so the worst stays the worst — clears the
+    # floor or, as a closest row, `each_near`. The pool is ~1,500 lists since
+    # 7.1 and personalising every one for every teammate against every
+    # opponent was most of a match plan's time.
+    line = None
+    if each_floor is not None and (each_near is not None or not each_min):
+        # (With closest fills and no `each_near`, any row may become one.)
+        line = each_floor if each_near is None else min(each_floor, each_near)
+
+    worst_of: dict[int, tuple] = {}
+
+    def alive(r, p) -> bool:
+        if line is None:
+            return True
+        # The same for every teammate before their shift: worked once a row.
+        got = worst_of.get(id(r))
+        if got is None:
+            got = worst_of[id(r)] = each_worst(
+                r.get("vs") if "vs" in r else vs_archetypes(r), plays)
+        low, fam = got
+        if low is None:
+            return fam is None
+        wc = r.get("winCon")
+        sh = float((p.get("shift") or {}).get(wc) or 0.0) if wc else 0.0
+        return (personal_rate(low, sh) if sh else low) >= line
+
     cand: dict[str, list[dict]] = {}
     for p in players:
-        own = list(p.get("own") or [])
+        own = [r for r in (p.get("own") or []) if alive(r, p)]
+        mine_pool = [r for r in (pool or []) if alive(r, p)]
         cand[p["tag"]] = [_personal_row(r, p)
-                          for r in own + fills(own, pool or [], need=len(pool or []))]
+                          for r in own + fills(own, mine_pool, need=len(mine_pool))]
 
     def beats_all(r) -> bool:
         if each_floor is None:
@@ -2589,19 +2635,21 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                                   + _familiar_first(c), each_floor=each_floor)
                 if len(picked) >= want:
                     break
-            if each_floor is not None and len(picked) < min(each_min, limit):
-                # Nothing more wins every matchup for them: the closest decks
-                # (highest worst matchup) fill the list to `each_min`, marked.
-                keep = {r["key"] for r in picked}
-                picked = counters(rows, plays, limit=max(min(each_min, limit), len(picked)),
-                                  score_key="personalScore", specific=False,
-                                  by_wincon=True, per_family=per_wincon, floor_only=True,
-                                  adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
-                                  + _familiar_first(c),
-                                  each_floor=each_floor, each_min=each_min)
-            for r in picked:
-                if not r.get("owner") and r["key"] not in {h["key"] for h in held[tag]}:
-                    taken[r["key"]] = taken.get(r["key"], 0) + 1
+        if each_floor is not None and len(picked) < min(each_min, limit):
+            # Nothing more wins every matchup for them: the closest decks
+            # (highest worst matchup) fill the list to `each_min`, marked —
+            # every other win condition's best try when `each_min` is the
+            # list's length (7.1).
+            keep = {r["key"] for r in picked}
+            picked = counters(rows, plays, limit=max(min(each_min, limit), len(picked)),
+                              score_key="personalScore", specific=False,
+                              by_wincon=True, per_family=per_wincon, floor_only=True,
+                              adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
+                              + _familiar_first(c),
+                              each_floor=each_floor, each_min=each_min, each_near=each_near)
+        for r in picked:
+            if not r.get("owner") and r["key"] not in {h["key"] for h in held[tag]}:
+                taken[r["key"]] = taken.get(r["key"], 0) + 1
         if picked:
             picked[0]["squadPick"] = True
         lists[tag] = picked

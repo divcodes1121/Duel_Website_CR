@@ -67,9 +67,26 @@ export function topTitle(rec: Pick<TeamRecommendation, 'top'>): string | undefin
   );
 }
 
-/** The pill's tooltip: the top players' use, then the CRL group's, either or both. */
-export function originTitle(rec: Pick<TeamRecommendation, 'top' | 'crl'>): string | undefined {
-  const parts = [topTitle(rec), crlTitle(rec)].filter(Boolean);
+/**
+ * 7.1: `Played in 212 duel games by 18 players in the window · 57% won` — a
+ * list from the window's duels (clan-war and friendly, anybody's). Undefined
+ * on a row that carries no such record.
+ */
+export function duelListTitle(rec: Pick<TeamRecommendation, 'duelList'>): string | undefined {
+  const d = rec.duelList;
+  if (!d || !d.games) return undefined;
+  const won = Math.round((100 * d.wins) / d.games);
+  return (
+    `Played in ${d.games.toLocaleString('en-US')} duel game${d.games === 1 ? '' : 's'} ` +
+    `by ${d.pilots.toLocaleString('en-US')} players in the window · ${won}% won`
+  );
+}
+
+/** The pill's tooltip: the top players' use, the CRL group's, the window's duels. */
+export function originTitle(
+  rec: Pick<TeamRecommendation, 'top' | 'crl' | 'duelList'>,
+): string | undefined {
+  const parts = [topTitle(rec), crlTitle(rec), duelListTitle(rec)].filter(Boolean);
   return parts.length ? parts.join('\n') : undefined;
 }
 

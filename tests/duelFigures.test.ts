@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamDuelFigures } from '../src/state/analyticsClient';
 import {
-  crlTitle, duelChip, duelDeckLabel, duelPickLabel, duelShort, duelTitle, originTitle, topTitle,
+  crlTitle, duelChip, duelDeckLabel, duelListTitle, duelPickLabel, duelShort, duelTitle, originTitle, topTitle,
 } from '../src/utils/duelFigures';
 
 /**
@@ -74,5 +74,17 @@ describe('duelFigures', () => {
       expect(s).not.toMatch(/\.\s+[A-Z]/); // no second sentence
       expect(s.split(/\s+/).length).toBeLessThanOrEqual(10);
     }
+  });
+});
+
+describe('7.1: a list from the duels of the window', () => {
+  it('says how many duel games and players stand behind it', () => {
+    expect(duelListTitle({ duelList: { games: 212, wins: 121, pilots: 18 } })).toBe(
+      'Played in 212 duel games by 18 players in the window · 57% won',
+    );
+    expect(duelListTitle({})).toBeUndefined();
+  });
+  it('the pill tooltip carries it', () => {
+    expect(originTitle({ duelList: { games: 10, wins: 5, pilots: 3 } })).toContain('10 duel games by 3 players');
   });
 });
