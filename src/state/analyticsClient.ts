@@ -3061,6 +3061,8 @@ export type TeamMode = 'scout' | 'squads';
  */
 export interface TeamOverall {
   players: number;
+  /** 7.2: the win-condition brains against the roster as a whole. */
+  brains?: TeamBrainsReport | null;
   spread: TeamSpreadRow[];
   /** What the roster plays, pooled, by family. Absent before brain 3.0. */
   plays?: PlaysFamily[];

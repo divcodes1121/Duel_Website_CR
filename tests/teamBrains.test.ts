@@ -27,4 +27,8 @@ describe('the win-condition brains on a folder', () => {
   it('both modes say how many win conditions and decks were rated', () => {
     expect(src.match(/<BrainsLine folder=\{folder\} \/>/g)?.length).toBe(2);
   });
+  it('the roster-wide list a scouting report opens on has them too (missed in the first 7.2)', () => {
+    expect(src).toMatch(/<BrainsLine folder=\{overall\} \/>/);
+    expect(src).toMatch(/overall\.brains\?\.brains\.find\(\(b\) => b\.family === r\.winFamily\)/);
+  });
 });

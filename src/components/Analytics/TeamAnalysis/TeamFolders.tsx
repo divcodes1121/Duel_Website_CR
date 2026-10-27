@@ -138,6 +138,7 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
         ) : (
           <div>
             <SuggestHeading />
+            <BrainsLine folder={overall} />
             <ol className={styles.mateDecks}>
               {overall.recommended.map((r, i) => (
                 <Recommendation
@@ -145,6 +146,11 @@ export function RosterRead({ overall }: { overall: TeamOverall }) {
                   rec={r}
                   rank={i + 1}
                   labels={chipLabels(overall)}
+                  brain={
+                    r.winFamily
+                      ? overall.brains?.brains.find((b) => b.family === r.winFamily)
+                      : undefined
+                  }
                 />
               ))}
             </ol>
@@ -273,7 +279,7 @@ export function FolderGallery({
 }
 
 /** `29 win conditions · 2,857 decks rated` — the brains behind this list (7.2). */
-function BrainsLine({ folder }: { folder: TeamFolder }) {
+function BrainsLine({ folder }: { folder: Pick<TeamFolder, 'brains'> }) {
   const b = folder.brains;
   if (!b || !b.families) return null;
   return (

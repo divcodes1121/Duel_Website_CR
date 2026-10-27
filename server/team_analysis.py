@@ -4041,6 +4041,16 @@ def _combined(red: list[dict], cards: list[_Candidate],
             }
         except Exception:  # noqa: BLE001
             traceback.print_exc()
+    # THE WIN-CONDITION BRAINS for the roster as a whole too (7.2): the list a
+    # scouting report opens on must have the same dropdowns as each folder.
+    try:
+        names = {p["family"]: p["name"] for p in plays}
+        brains = _brain_view(
+            scout.win_condition_brains(scored, plays, recommended), by_key, names,
+            [p["family"] for p in plays if p["share"] >= scout.EACH_SHARE])
+    except Exception:  # noqa: BLE001 - a report, never a reason to fail the board
+        traceback.print_exc()
+        brains = None
     recommended = _finish(recommended, by_key, threats, ctx, proj, snap)
     if duel.get("available"):
         duel["picked"] = sum(1 for r in recommended if r.get("origin") == "duel")
@@ -4057,6 +4067,7 @@ def _combined(red: list[dict], cards: list[_Candidate],
         "mass": projection.get("mass"),
         "read": projection.get("read"),
         "recommended": _evidence_on_top(recommended),
+        "brains": brains,
         "duel": duel,
         "reason": None if scored else "no_evidence",
         "brain": scout.BRAIN_VERSION,

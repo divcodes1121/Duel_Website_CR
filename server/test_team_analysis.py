@@ -1583,6 +1583,13 @@ try:
     _a2 = ta.analyze([], ["#R1"], days=30)
     check("so does Team Analysis", len(_used) >= 1 and _a2["fusion"].get("cardModel") in ("card-matchup-test", None),
           str(_a2.get("fusion")))
+    # 7.2: THE ROSTER AS A WHOLE — the list a scouting report opens on —
+    # carries the win-condition brains too (missed in 7.2's first build).
+    _ov = (_a2.get("overall") or {})
+    check("the roster-wide list carries the brains, each with its top decks",
+          _ov.get("recommended") and (_ov.get("brains") or {}).get("families", 0) >= 1
+          and all(e.get("decks") for e in _ov["brains"]["brains"]),
+          str(sorted(_ov.keys())) + " " + str(_ov.get("reason")))
     del _used[:]
     _saved_ft2 = ta._field_threats
     ta._field_threats = lambda: [{"cards": [], "archetype": "golem", "family": "golem",
