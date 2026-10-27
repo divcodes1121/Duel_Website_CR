@@ -59,6 +59,7 @@ bot's SQLite files read-only.
 | **Coach Duel — you against an AI coach** | **LIVE, OPEN TO PRO AND THE THREE-DAY TRIAL since 2026-10-22** (admin only 2026-10-20..22; signed-out and free accounts see the sign-up gate). You coach Blue one game at a time (paste a deck, lock in, the AI's deck flips), best of 3 or 5, stop on a win or play every game; a matchup over 55% wins the game, a close one is rolled. The Red AI coach picks without seeing your deck. Both sides draw from every duel deck grouped by archetype (`duel_archetypes`, CRL lists first), no deck comes back on a rematch or a refresh, and every new start is a new draw; decks are checked to make sense. Clash Royale's Blue and Red Kings over an arena floor. **Since 2026-10-22 (`ff016d3`, `382647d`) two coaches can play each other online**: the host sets the format and a deck clock (2-5 min or no limit), shares a room link, the other coach joins with their own player, both lock in blind and the server decides each game; out of time loses that game. Its landing panel is the same size as the other four. See [Coach Duel](#coach-duel--you-against-an-ai-coach-best-of-3-2026-10-20-rebuilt-2026-10-21) and [Two coaches online: rooms](#two-coaches-online-rooms-2026-10-22) |
 | **Find a player by name** | **LIVE 2026-10-19 as `6f6a1df`** (server by scp first, backups `*.bak-20261019-100059-prenamesearch`, only royalweb restarted; the site reported the commit 60 s after the push; 9/9 in a real browser on https://deckkies.com signed out, the dropdown filled 460 ms after the last key). Asked, with RoyaleAPI's search pasted: type a name, see the players who carry it, fast. Every search field (top bar, player screen, landing hero) now lists up to seven players as you type, with their tags, and "View all N results" opens `#/search?q=` with the top 100. The server reads its own trigram index of the bot's 5,898,255 stored names (`server/name_index.py`, refreshed after every poll), never the bot's table: a scan of that table measured 0.6 s warm / 4.6 s cold, the index answers in 13 ms median, 39 ms worst, and a request from India is ~0.35 s on an open connection. 643 MB on disk, bounded to names seen in the last 304 days. See [Find a player by name](#find-a-player-by-name-2026-10-19) |
 | **When something breaks: a 404 page with a three.js game, an outage page that reloads itself, and watchdogs** | **2026-10-19.** After the VPS was powered off for half an hour on 2026-10-18 and every search hung for 200+ s: a slow request now asks whether the server is alive and gives up in seconds; an outage page (with the game) re-checks on its own and reloads when the server is back; unknown routes and wrong URLs get a 404 page with the same game; a crashed screen gets the page instead of a blank site; a watchdog on the VPS restarts the API when it stops answering or loses sight of its database; a GitHub workflow emails when the site is down and can start a stopped VPS once Contabo API keys are added. See [When something breaks](#when-something-breaks-the-404-game-the-outage-page-and-the-watchdogs-2026-10-19) |
+| **Team Analysis: a brain for every win condition, top 5 in a dropdown (`team-scout-7.2`)** | **LIVE 2026-10-27 (server 05:29 UTC, backups `*.bak-20261027-052907-prets72`).** "Still so many archetypes missing" / "17 win cons, 17 brains" / "a click dropdown ... top 5 decks". Pool 2,857 lists (duel lists 3 games / 2 players, top-1k 2 players), 29 families; every family's answer down to a 35% worst matchup, up to 3 different builds that beat everything; each suggested deck opens its win condition's top 5. Two empty-folder bugs fixed (a 4.996% family with no list; a player with no ranked/friendly games). Saved boards: 26 decks per opponent, 12.5 beating everything. See [A brain for every win condition](#a-brain-for-every-win-condition-and-its-top-five-team-scout-72-2026-10-27) |
 | **Team Analysis: every win condition, from ~1,400 decks (`team-scout-7.1`)** | **2026-10-27.** 7.0 showed 4-5 decks a folder; asked for multiple win conditions from "hundreds and thousands of decks in duels and the top 1k ladder", with many brains and one super brain. Pool: every top-1,000 list + every list played in duels in the window (1,410 on 30 days); decks that beat every archetype lead, then each other win condition's closest list (worst matchup 45%+), marked. Saved boards: 3 -> 12 decks per opponent, 0 rows under 45%. Duel model and LightGBM checked, not added. History matching indexed (10.4 -> 5.1 s per 10 opponents). See [Every win condition, from thousands of decks](#every-win-condition-from-thousands-of-decks-team-scout-71-2026-10-27) |
 | **Team Analysis lists only decks that win every archetype the opponent plays (`team-scout-7.0`)** | **LIVE 2026-10-26 20:38 UTC (server by scp first, backups `*.bak-20261026-203806-prets7`, royalweb only, bot PID unchanged), then the site.** Reported: decks "poor and not reliable"; asked for decks over 50% against ALL the opponent's archetypes, read from ranked + 1v1 friendly games, top decks with good synergy. Measured: 82% of 6.1's shown decks lost to at least one archetype the opponent plays. Now every listed deck wins all of them (or is marked Closest when fewer than three do), the opponent read drops clan-war duels and special modes, and pool lists must pass the card-pairing gate. On the account holder's 9 saved boards: folder decks losing one 1,430/1,806 -> 59/463 (marked), teammate #1 losing one 176/340 -> 40/340. See [Decks that win every archetype they play](#decks-that-win-every-archetype-they-play-team-scout-70-2026-10-27) |
 | **Team Analysis suggests what the top 1,000 players use, re-read every poll (`team-scout-6.1`)** | **LIVE SINCE 2026-10-24 (server + client).** Reported: *"decks not used by top players — target the top 1k and the CRL duel list, set the frequency like that ... the top 1000 changes every poll"*. `top_decks.py` reads the LIVE ranked board's top 1,000 after every poll and counts their ranked lists (no tags stored); the pool is lists 3+ of them used for 30+ games plus CRL staples; a list's choosing gains half a point per doubling of its users. Same roster: 82% of rows are top-1000 lists, median 13 top players behind a row, #1 63.0 -> 64.8. See [What the top 1,000 players use](#what-the-top-1000-players-use-re-read-every-poll-team-scout-61-2026-10-24) |
@@ -247,6 +248,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 27e. [Ten decks, specific to the opponent](#ten-decks-specific-to-the-opponent-2026-10-10)
 27f. [Counters read the cards](#counters-read-the-cards-2026-10-11)
 27g. [The day window picks the suggested decks](#the-day-window-picks-the-suggested-decks-2026-10-11)
+27f8. [A brain for every win condition, and its top five](#a-brain-for-every-win-condition-and-its-top-five-team-scout-72-2026-10-27)
 27f9. [Every win condition, from thousands of decks](#every-win-condition-from-thousands-of-decks-team-scout-71-2026-10-27)
 27g0. [Decks that win every archetype they play](#decks-that-win-every-archetype-they-play-team-scout-70-2026-10-27)
 27g1. [What the top 1,000 players use, re-read every poll](#what-the-top-1000-players-use-re-read-every-poll-team-scout-61-2026-10-24)
@@ -13459,6 +13461,71 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## A brain for every win condition, and its top five (team-scout-7.2, 2026-10-27)
+
+Asked after 7.1 went live: *"still so many archetypes missing ... in duels
+there are so many decks as well as in the top 1k which counter so many
+things"*, *"duel decks have so many varieties ... different cards with
+different archetypes"*, *"make multiple brains, like 17 win cons 17 brains ...
+rate the decks, give it to the main brain"*, and *"a click dropdown for all win
+cons showing the top 5 decks rated against the player"*.
+
+**Measured first** (deployed 7.1, the four Players.txt opponents): of 26
+families in the pool each opponent got 7-15. The rest were missing because
+their best list's worst matchup was 40-44% (most of them), because it was
+under 50% overall, or because the family had no list at all — Executioner,
+Furnace, Inferno Tower, Mega Knight, Musketeer and Suspicious Bush are played
+in duels only by small groups and missed the 10-games / 3-players bar. Pool
+options on 20 opponents:
+
+| pool | lists | families | 20 opponents | win cons listed | beating everything |
+|---|---|---|---|---|---|
+| 7.1 (duel 10 g / 3 players, line 45) | 1,410 | 26 | 12.7 s | 13 | 5 |
+| 7.1 pool, line 40 | 1,410 | 26 | 9.7 s | 20 | 5 |
+| duel 5 g / 2 players, top 2 players | 2,223 | 29 | 14.5 s | 21 | 5 |
+| duel 3 g / 2 players, top 2 players | 2,857 | 29 | 18.7 s | 21 | 6 |
+
+**Built:**
+
+- **The pool**: `DUEL_LIST_MIN_GAMES` 3, `DUEL_LIST_MIN_PILOTS` 2,
+  `TOP_MIN_PLAYERS` 2 — 2,857 lists, 29 win-condition families.
+- **A brain per win condition** (`team_scout.win_condition_brains`): every
+  list of its family rated against the opponent; the report says how many
+  lists, how many beat every family, its best worst matchup, how many the main
+  list shows, and its top `BRAIN_TOP` (5) lists — beating everything first,
+  one-card variants folded (`BRAIN_SAME` 7). On every folder as `brains`,
+  dressed by `team_analysis._brain_view` (seated, no second rating).
+- **The main brain** (`counters`): every family's answer — up to
+  `EACH_PER_FAMILY` (3) different builds that beat everything (the near-copy
+  rule keeps them six cards apart), else its closest list down to
+  `EACH_NEAR_ALL` (35%; was 45). Same for each teammate's list.
+- **Two bugs the saved boards found, fixed with tests**: (1) a family at
+  4.996% of an opponent's play was published as 5.00% and required, but
+  `played_space` compared the unrounded share and kept no list for it — every
+  deck "failed" it and the folder was empty (now the rounded share, and
+  `judged_plays` never requires a family no deck could be rated against);
+  (2) a player with no ranked or 1v1 friendly games in the window (clan-war
+  only) had no projection — now every own-deck game is read, and
+  `played.modes` says `all`.
+- **Screen**: under every suggested deck, a "Top 5 <win condition> decks ·
+  n/m beat all" dropdown (`BrainDrop`) with each deck's figure, origin pill,
+  Closest mark and archetype chips; the deck shown above is marked. A line
+  "29 win conditions · 2,857 decks rated" under the heading. Both modes.
+  Payload ~175 kB per opponent raw, ~23 kB gzipped (Caddy compresses).
+
+**Staged, the account holder's 9 saved boards (88 opponents):** decks per
+opponent median 26 (7.1: 12, 7.0: 3), of which 12.5 beat every family they
+play (7.1: 6); teammate lists 27 (12 beating everything); 0 of 11,575 rows
+mislabelled, 0 with a worst matchup under 35%; #1 figure 64.3%. The one empty
+folder left is a player the bot has stored a single 2v2 battle for. Time: 9
+boards 161 s including a cold pool build (59 s for the first); a 10v10 plan
+14-20 s, a 9-14 player scouting report 9-13 s. Brain `team-scout-7.2`. Tests:
+`test_team_scout` 252, `test_team_analysis` 373, vitest 1,844
+(`teamBrains.test.ts` new). Browser 25/25 on staged payloads (dark and light
+1440, dark 390; the dropdown opens to five decks with art, one marked as the
+deck above; a teammate's deck has one too).
+
 
 ## Every win condition, from thousands of decks (team-scout-7.1, 2026-10-27)
 

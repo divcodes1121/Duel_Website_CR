@@ -1028,7 +1028,7 @@ finally:
 
 print(NL + "counters to what they play")
 
-check("the brain is 7.1", ts.BRAIN_VERSION == "team-scout-7.1" and folder["brain"] == ts.BRAIN_VERSION)
+check("the brain is 7.2", ts.BRAIN_VERSION == "team-scout-7.2" and folder["brain"] == ts.BRAIN_VERSION)
 
 # 7.0: EVERY ROW SAYS WHETHER IT BEATS EVERY FAMILY THEY PLAY — and the mark
 # survives the full re-rating of a chosen row (`_CHOSEN_KEYS`).
@@ -1048,6 +1048,22 @@ _srows = scout_folder["recommended"]
 check("a scouting row keeps its mark through the full re-rating",
       _srows and all(isinstance(r.get("allArchetypes"), bool) and "art" in r for r in _srows),
       str([(r.get("name"), r.get("allArchetypes"), "art" in r) for r in _srows]))
+# 7.2: THE WIN-CONDITION BRAINS ride on every folder: one entry a win
+# condition, each with its top decks against this opponent, seated, for the
+# screen's dropdown.
+_br = scout_folder.get("brains") or {}
+_bd = [d for e in _br.get("brains") or [] for d in e.get("decks") or []]
+check("a folder carries the win-condition brains, each with its top decks",
+      _br.get("families", 0) >= 1 and _bd
+      and all(len(e.get("decks") or []) <= ts.BRAIN_TOP and e.get("name") for e in _br["brains"]),
+      str({k: v for k, v in _br.items() if k != "brains"}))
+check("...each deck seated, rated, marked, its worst matchup named",
+      all(len(set(d["cards"])) == 8 and d["expectedWinRate"] is not None
+          and isinstance(d["allArchetypes"], bool) and "eachWorst" in d for d in _bd),
+      str(_bd[:1]))
+check("...its chips only for the families the screen names",
+      all(set(d["vs"]) <= set(_br["required"]) for d in _bd))
+
 _saved_syn = ta._synergy
 ta._synergy = types.SimpleNamespace(passes=lambda cards: "odd" not in cards)
 check("the card-pairing gate keeps a list duel players pair like a real deck",
@@ -1415,6 +1431,18 @@ _me = ta._resolve("#R1", 30)
 check("an opponent is read from ranked and 1v1 friendly games only (7.0)",
       _ASKED_MODES and set(_ASKED_MODES) == {"ranked_friendly"}
       and ta.OPPONENT_MODES == ta._pdecks.RANKED_FRIENDLY, str(_ASKED_MODES))
+check("...and says so on the resolved player", _me["played"]["modes"] == "ranked_friendly")
+# 7.2: NO RANKED OR FRIENDLY GAMES IN THE WINDOW -> every own-deck game.
+_saved_pl = ta._pdecks.played
+_asked2 = []
+ta._pdecks.played = lambda tag, since=None, until=None, modes=None: (
+    _asked2.append(modes) or ({"per": {}, "marks": {}, "duel": {}, "duelGames": 0, "hidden": {}}
+                              if modes else _saved_pl(tag, since, until)))
+_cw = ta._resolve("#R1", 30)
+check("a player with no ranked or friendly games is read from every own-deck game, said so",
+      _asked2 == ["ranked_friendly", None] and _cw["decks"] and _cw["played"]["modes"] == "all",
+      f"{_asked2} {len(_cw['decks'])} {_cw.get('played')}")
+ta._pdecks.played = _saved_pl
 check("each deck says how many of its games were duel games, never more than it has",
       [d["duelMatches"] for d in _me["decks"]] == [12, 10], str([d.get("duelMatches") for d in _me["decks"]]))
 check("with no duel index there are no older duel decks, and the read still answers",
@@ -1477,7 +1505,8 @@ check("...and a family and a name on every one",
 check("the header counts the same games the deck list does",
       _me["battles"] == 100 and _me["winRate"] == 56.0, f"{_me['battles']} {_me['winRate']}")
 check("...and says how many were duel games and how many were left out",
-      _me["played"] == {"source": "own_deck", "duelGames": 12, "hidden": 300}, str(_me.get("played")))
+      _me["played"] == {"source": "own_deck", "duelGames": 12, "hidden": 300,
+                        "modes": "ranked_friendly"}, str(_me.get("played")))
 _real = ta._pdecks.played
 ta._pdecks.played = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no reader"))
 check("without the reader the every-mode list still answers",
@@ -2036,7 +2065,7 @@ try:
 
     # 6.1: THE TOP 1,000 PLAYERS' LISTS ARE THE META HALF when there is a file.
     TP1, TP2, TP3 = cards("tpa"), cards("tpb"), cards("tpc")
-    _topwin = {_k(TP1): [40, 900, 480, "hog"], _k(TP2): [2, 300, 150, "hog"],
+    _topwin = {_k(TP1): [40, 900, 480, "hog"], _k(TP2): [1, 300, 150, "hog"],
                _k(TP3): [3, 20, 10, "golem"], _k(ME1): [5, 60, 33, "golem"],
                _k(CR1): [4, 50, 30, ""]}
     _top_calls = []
@@ -2052,8 +2081,8 @@ try:
           str(sorted(kt)))
     check("...read over the window asked for, ending on its last day",
           _top_calls[-1] == (7, _dt5.date(2026, 10, 14)), str(_top_calls[-1:]))
-    check("a list fewer than three top players used is not in, however much one played it",
-          _k(TP2) not in kt and ta.TOP_MIN_PLAYERS == 3)
+    check("a list fewer than TOP_MIN_PLAYERS (two since 7.2) used is not in, however much one played it",
+          _k(TP2) not in kt and ta.TOP_MIN_PLAYERS == 2)
     check("...nor one three used for fewer than thirty games", _k(TP3) not in kt and ta.TOP_MIN_GAMES == 30)
     check("a top list is labelled top and carries its use; one the CRL group brought too keeps both",
           kt[_k(TP1)].origin == "top" and kt[_k(TP1)].top == [40, 900, 480]

@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type {
+  TeamBrain,
+  TeamBrainDeck,
   TeamFolder,
   TeamMode,
   TeamOverall,
@@ -270,6 +272,17 @@ export function FolderGallery({
   );
 }
 
+/** `29 win conditions · 2,857 decks rated` — the brains behind this list (7.2). */
+function BrainsLine({ folder }: { folder: TeamFolder }) {
+  const b = folder.brains;
+  if (!b || !b.families) return null;
+  return (
+    <p className={styles.brainsLine} data-brains>
+      {b.families} win conditions · {b.lists.toLocaleString('en-US')} decks rated
+    </p>
+  );
+}
+
 /**
  * One recommended deck, with the reasoning it was chosen on.
  *
@@ -281,9 +294,102 @@ export function FolderGallery({
  * headline alone cannot separate "this beats them" from "this beats
  * everybody", and those are very different reasons to top a ranking.
  */
-function Recommendation({ rec, rank, labels }: {
+/**
+ * ONE WIN CONDITION'S BRAIN, opened under a suggested deck (7.2): its top
+ * decks against this opponent — those beating every archetype they play
+ * first — each with its figure and a chip per archetype. Asked for: "a click
+ * dropdown for all win cons showing the top 5 decks rated against the player".
+ * Collapsed by default; the row above is one of them.
+ */
+function BrainDrop({ brain, labels, current }: {
+  brain: TeamBrain;
+  labels?: [string, string][];
+  /** The deck on the row this hangs under, marked in the list. */
+  current?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  if (!brain.decks.length) return null;
+  return (
+    <div className={styles.brainDrop} data-brain={brain.family}>
+      <button
+        type="button"
+        className={styles.brainToggle}
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen(!open)}
+        title={`${brain.lists.toLocaleString('en-US')} ${brain.name} lists rated against this player`}
+      >
+        <span>
+          Top {brain.decks.length} {brain.name} decks
+        </span>
+        <span className={styles.brainCount}>
+          {brain.beatAll}/{brain.lists} beat all
+        </span>
+        <span className={styles.brainChevron} data-open={open || undefined} aria-hidden="true">
+          ▾
+        </span>
+      </button>
+      {open && (
+        <ol className={styles.brainList} id={id}>
+          {brain.decks.map((d, i) => (
+            <BrainDeckRow key={d.key} d={d} rank={i + 1} labels={labels} current={d.key === current} />
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function BrainDeckRow({ d, rank, labels, current }: {
+  d: TeamBrainDeck;
+  rank: number;
+  labels?: [string, string][];
+  current: boolean;
+}) {
+  const closest = closestPill(d, (k) => labels?.find(([f]) => f === k)?.[1]);
+  return (
+    <li className={styles.brainDeck} data-current={current || undefined}>
+      <div className={styles.brainDeckHead}>
+        <span className={styles.brainRank}>{rank}</span>
+        {duelDeckLabel(d) && (
+          <span className={styles.recDuel} data-origin={d.origin} title={originTitle(d)}>
+            {duelDeckLabel(d)}
+          </span>
+        )}
+        {closest && (
+          <span className={styles.recClosest} title={closest.title} data-closest>
+            {closest.label}
+          </span>
+        )}
+        <span className={styles.recDeck}>{d.name}</span>
+        <span className={styles.brainRate}>{pct(d.expectedWinRate)}</span>
+      </div>
+      <Strip cards={d.cards} art={d.art} filled={d.artFilled} name={d.name} />
+      {labels && (
+        <ul className={styles.recVs}>
+          {labels
+            .filter(([k]) => d.vs?.[k] !== undefined)
+            .map(([k, name]) => {
+              const v = d.vs[k];
+              return (
+                <li key={k} className={styles.recVsItem} data-ok={v >= 50 || undefined}>
+                  <span>{name}</span>
+                  <strong>{v.toFixed(0)}%</strong>
+                </li>
+              );
+            })}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function Recommendation({ rec, rank, labels, brain }: {
   rec: TeamRecommendation;
   rank?: number;
+  /** This deck's win-condition brain (7.2): its top decks, in a dropdown. */
+  brain?: TeamBrain;
   /** Archetype key -> display name, in the order the opponent is likely to
    *  bring them. Present only on a match plan whose server sent a squad plan. */
   labels?: [string, string][];
@@ -432,6 +538,7 @@ function Recommendation({ rec, rank, labels }: {
             })}
         </ul>
       )}
+      {brain && <BrainDrop brain={brain} labels={labels} current={rec.key} />}
       {/* NO TYPE / CONFIDENCE / EXPLANATION LINE AND NO COVERAGE SENTENCE.
           Both were here ("Robust · known · Holds up against Royal Hogs …
           measured against 100% of their projected pool") and the account
@@ -503,11 +610,12 @@ const NO_OPTIONS: Record<string, string> = {
  * that produced it, so the list answers "who should take this one" before
  * anything is opened at all — the expansion is for *why*, not for *what*.
  */
-function PlayerRow({ row, open, onToggle, labels }: {
+function PlayerRow({ row, open, onToggle, labels, brainOf }: {
   row: TeamPlayerOptions;
   open: boolean;
   onToggle: () => void;
   labels?: [string, string][];
+  brainOf?: (rec: TeamRecommendation) => TeamBrain | undefined;
 }) {
   const best = row.decks[0];
   /* WHAT THIS TEAMMATE'S #1 ANSWERS FOR THE SQUAD, named on the collapsed row
@@ -578,6 +686,7 @@ function PlayerRow({ row, open, onToggle, labels }: {
               rec={r}
               rank={i + 1}
               labels={labels}
+              brain={brainOf?.(r)}
             />
           ))}
         </ol>
@@ -616,6 +725,9 @@ export function OpenFolder({
   /* Archetype key -> name, most likely first — the squad plan's own order,
      so every per-archetype figure on the board reads in the same order. */
   const labels: [string, string][] | undefined = chipLabels(folder);
+  /* 7.2: each suggested deck's win-condition brain, for its dropdown. */
+  const brains = new Map((folder.brains?.brains ?? []).map((b) => [b.family, b]));
+  const brainOf = (r: TeamRecommendation) => (r.winFamily ? brains.get(r.winFamily) : undefined);
   return (
     <div className={styles.open}>
       <div className={styles.openHead}>
@@ -695,9 +807,16 @@ export function OpenFolder({
                  a click in front of the one thing on the board. */
               <section className={styles.boardSide} data-side="blue">
                 <SuggestHeading />
+                <BrainsLine folder={folder} />
                 <ol className={styles.mateDecks}>
                   {folder.recommended.map((r, i) => (
-                    <Recommendation key={`${r.archetype}-${i}`} rec={r} rank={i + 1} labels={labels} />
+                    <Recommendation
+                      key={`${r.archetype}-${i}`}
+                      rec={r}
+                      rank={i + 1}
+                      labels={labels}
+                      brain={brainOf(r)}
+                    />
                   ))}
                 </ol>
               </section>
@@ -707,6 +826,7 @@ export function OpenFolder({
                  reason to omit them. */
               <section className={styles.boardSide} data-side="blue">
                 <SuggestHeading />
+                <BrainsLine folder={folder} />
                 <SquadCover rows={folder.squadCover ?? []} />
                 <ul className={styles.mates}>
                   {folder.perPlayer.map((row) => (
@@ -714,6 +834,7 @@ export function OpenFolder({
                       key={row.owner.tag}
                       row={row}
                       labels={labels}
+                      brainOf={brainOf}
                       open={openMate === row.owner.tag}
                       onToggle={() =>
                         setOpenMate(openMate === row.owner.tag ? null : row.owner.tag)

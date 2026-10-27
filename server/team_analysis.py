@@ -578,8 +578,15 @@ def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
     if _pdecks is None:
         return None
     try:
-        # RANKED AND 1v1 FRIENDLY GAMES ONLY (7.0, `OPPONENT_MODES`).
+        # RANKED AND 1v1 FRIENDLY GAMES ONLY (7.0, `OPPONENT_MODES`) — and,
+        # for a player with none in the window, every own-deck game (7.2): a
+        # clan-war-only player otherwise read as "no history" and their folder
+        # came back empty (seen on a saved board).
         got = _pdecks.played(tag, since, until, modes=OPPONENT_MODES)
+        all_modes = False
+        if not got.get("per"):
+            got = _pdecks.played(tag, since, until)
+            all_modes = True
     except Exception:  # noqa: BLE001 - the old list is the fallback
         traceback.print_exc()
         return None
@@ -620,6 +627,7 @@ def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
     return {
         "decks": rows, "battles": total, "wins": wins,
         "duelGames": got["duelGames"], "hidden": sum((got["hidden"] or {}).values()),
+        "modes": "all" if all_modes else OPPONENT_MODES,
         "older": _older_duel_decks(tag, since),
     }
 
@@ -729,7 +737,7 @@ def _resolve(tag: str, days: int, window: tuple | None = None) -> dict:
             out["winRate"] = (round(100.0 * own["wins"] / own["battles"], 1)
                               if own["battles"] else 0.0)
             out["played"] = {"source": "own_deck", "duelGames": own["duelGames"],
-                             "hidden": own["hidden"]}
+                             "hidden": own["hidden"], "modes": own.get("modes")}
             out["older"] = own.get("older") or []
         return out
 
@@ -2074,7 +2082,8 @@ CRL_SOLO_GAMES = 20
 # list one person spams is their taste, not the top of the game.
 
 #: Top players who used a list in the window before it joins the pool ...
-TOP_MIN_PLAYERS = 3
+#: (3 until 7.2; see `DUEL_LIST_MIN_GAMES`)
+TOP_MIN_PLAYERS = 2
 #: ... and the games they played it between them.
 TOP_MIN_GAMES = 30
 #: The most used lists of each win condition that join.
@@ -2091,9 +2100,12 @@ TOP_PER_FAMILY = 1000
 #: 7.1: EVERY LIST PLAYED IN DUELS IN THE WINDOW — clan-war and friendly, by
 #: anybody — with this many games, this many pilots, and no pilot holding more
 #: than `DUEL_LIST_MAX_SHARE` of them (`duel_index.window_lists`): 1,262 lists
-#: on a 30-day window (2026-10-27), 25 families.
-DUEL_LIST_MIN_GAMES = 10
-DUEL_LIST_MIN_PILOTS = 3
+#: on a 30-day window (2026-10-27), 25 families, at 10 games and 3 pilots (7.1).
+#: 7.2, the same day ("duel decks have so many varieties ... 17 win cons, 17
+#: brains"): 3 games and 2 pilots, with `TOP_MIN_PLAYERS` 2 — a 2,857-list pool,
+#: 29 families; on 20 real opponents 0.9 s an opponent against 0.6 s.
+DUEL_LIST_MIN_GAMES = 3
+DUEL_LIST_MIN_PILOTS = 2
 DUEL_LIST_MAX_SHARE = 0.5
 
 #: HOW OFTEN THE TOP PLAYERS USE A LIST, in the choosing ("set the frequency
@@ -3753,7 +3765,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                                                     new_slots=PER_PLAYER_TOP_N,
                                                     each_floor=scout.EACH_FLOOR,
                                                     each_min=PER_PLAYER_TOP_N,
-                                                    each_near=scout.EACH_NEAR,
+                                                    each_near=scout.EACH_NEAR_ALL,
+                                                    each_per_family=scout.EACH_PER_FAMILY,
                                                     plays=plays)
             who = {m["tag"]: m["name"] for m in blue}
             for c in cover:
@@ -3775,7 +3788,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                               specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
                               each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
-                              each_near=scout.EACH_NEAR)
+                              each_near=scout.EACH_NEAR_ALL,
+                              each_per_family=scout.EACH_PER_FAMILY)
 
     per_player = []
     for mate in blue:
@@ -3819,7 +3833,17 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         recommended = scout.counters(scored, plays, limit=top_n, specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
                               each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
-                              each_near=scout.EACH_NEAR)
+                              each_near=scout.EACH_NEAR_ALL,
+                              each_per_family=scout.EACH_PER_FAMILY)
+    # THE WIN-CONDITION BRAINS' REPORT (7.2): what each win condition's lists
+    # did against this opponent, and how many the main brain listed.
+    try:
+        brains = _brain_view(
+            scout.win_condition_brains(pool_rows() if threats else [], plays, recommended),
+            by_key, names, [p["family"] for p in plays if p["share"] >= scout.EACH_SHARE])
+    except Exception:  # noqa: BLE001 - a report, never a reason to fail the folder
+        traceback.print_exc()
+        brains = None
     recommended = finish(recommended)
     for r in recommended:
         if blue and not r.get("owner"):
@@ -3871,6 +3895,7 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # WHICH TEAMMATE'S #1 ANSWERS EACH FAMILY THEY PLAY, most played first.
         # Empty in a scouting report (nobody to assign).
         "squadCover": cover,
+        "brains": brains,
         "considered": len(cards),
         "brain": scout.BRAIN_VERSION,
         # Said out loud rather than left to be inferred from an empty list.
@@ -3899,6 +3924,52 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         except Exception:  # noqa: BLE001
             traceback.print_exc()
             out["byFamily"] = []
+    return out
+
+
+def _brain_view(report: dict | None, by_key: dict, names: dict, fams: list[str]) -> dict | None:
+    """The win-condition brains' report as the screen draws it (7.2): each
+    brain's top decks seated and named, figures only — no second rating, so a
+    folder's dropdowns cost a seating each, not a scoring."""
+    if not report:
+        return report
+    out = dict(report)
+    brains = []
+    for e in report.get("brains") or []:
+        b = {k: v for k, v in e.items() if k != "decks"}
+        b["name"] = (names.get(e["family"]) or
+                     (dcx._label(e["family"]) if not str(e["family"]).startswith("other:") else None)
+                     or e.get("name") or e["family"])
+        decks = []
+        for pick in e.get("decks") or []:
+            r = pick["row"]
+            card = by_key.get(r.get("key"))
+            if card is not None:
+                cards, art, filled = cd.complete_seating(
+                    card.cards, card.art, slot_of=cd.seated_positions(card.cards, card.art))
+            else:
+                cards, art, filled = list(r.get("cards") or []), {}, []
+            w = dict(pick["eachWorst"])
+            if w.get("family"):
+                w["name"] = names.get(w["family"]) or dcx._label(w["family"] or "other")
+            d = {"key": r.get("key"), "name": r.get("name"), "cards": cards, "art": art,
+                 "avgElixir": dcx._avg_elixir(cards),
+                 "expectedWinRate": r.get("expectedWinRate"),
+                 "vs": {f: v for f, v in (r.get("vs") or {}).items() if f in fams},
+                 "allArchetypes": pick["allArchetypes"], "eachWorst": w,
+                 "origin": r.get("origin")}
+            if filled:
+                d["artFilled"] = filled
+            for attr, field, keys in (("top", "top", ("players", "games", "wins")),
+                                      ("crl", "crl", ("games", "wins", "pilots")),
+                                      ("duelw", "duelList", ("games", "wins", "pilots"))):
+                v = getattr(card, attr, None) if card is not None else None
+                if v:
+                    d[field] = dict(zip(keys, v[:3]))
+            decks.append(d)
+        b["decks"] = decks
+        brains.append(b)
+    out["brains"] = brains
     return out
 
 
@@ -3947,7 +4018,8 @@ def _combined(red: list[dict], cards: list[_Candidate],
                                  specific=SCOUT_SPECIFIC, band=SCOUT_BAND,
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
                               each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
-                              each_near=scout.EACH_NEAR)
+                              each_near=scout.EACH_NEAR_ALL,
+                              each_per_family=scout.EACH_PER_FAMILY)
 
     # THE DUELS, ROSTER-WIDE: every opponent's own duel games pooled, for the
     # duel figures on each row.

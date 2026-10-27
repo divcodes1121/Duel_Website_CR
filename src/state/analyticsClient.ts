@@ -2772,6 +2772,9 @@ export interface TeamRecommendation {
   metaRank?: number;
   /** Its win condition, as `player_skill` names one (a card key). */
   winCon?: string | null;
+  /** Its win-condition FAMILY (the archetype, or `other:<win con>`): the key
+   *  of the brain that rated it (`TeamFolder.brains`, 7.2). */
+  winFamily?: string;
   /** A match plan's row (5.0): the win condition is one this teammate plays
    *  (5% of their games or more), or the deck is their own. */
   familiar?: boolean;
@@ -2907,6 +2910,50 @@ export interface TeamPlayerOptions {
 }
 
 /** One opponent's folder: what they play, and what to bring against them. */
+/** One of a win-condition brain's top decks against this opponent (7.2). */
+export interface TeamBrainDeck {
+  key: string;
+  name: string;
+  cards: string[];
+  art?: Record<string, 'evolution' | 'hero'>;
+  artFilled?: string[];
+  avgElixir?: number | null;
+  expectedWinRate: number;
+  /** Its rate against each family the opponent plays at 5%+. */
+  vs: Record<string, number>;
+  /** Beats every one of them at 50%+. */
+  allArchetypes: boolean;
+  eachWorst: { family: string | null; rate: number | null; name?: string };
+  origin?: TeamRecommendation['origin'];
+  top?: { players: number; games: number; wins: number };
+  crl?: { games: number; wins: number; pilots: number };
+  duelList?: { games: number; wins: number; pilots: number };
+}
+
+/** One win condition's brain (7.2). */
+export interface TeamBrain {
+  family: string;
+  name: string;
+  /** Its lists rated against this opponent. */
+  lists: number;
+  /** How many of them beat every family they play. */
+  beatAll: number;
+  bestWorst: number | null;
+  bestRate: number | null;
+  /** How many of its lists the main list shows. */
+  shown: number;
+  /** Its top decks, those beating everything first. */
+  decks: TeamBrainDeck[];
+}
+
+export interface TeamBrainsReport {
+  families: number;
+  lists: number;
+  /** The families every deck is held to (5%+ of their play). */
+  required: string[];
+  brains: TeamBrain[];
+}
+
 export interface TeamFolder {
   player: {
     tag: string;
@@ -2960,6 +3007,10 @@ export interface TeamFolder {
   /** Which teammate's #1 answers each archetype they may bring, most likely
    *  first. Empty in a scouting report; absent from a brain-2.0 server. */
   squadCover?: TeamSquadCover[];
+  /** 7.2: one brain per win condition — what each found against this
+   *  opponent, and its top decks for the dropdown. Absent from an older
+   *  server or a saved board made before it. */
+  brains?: TeamBrainsReport | null;
   /** The duel brain's read of this opponent. Absent from an older server. */
   duel?: TeamDuelRead;
   considered: number;

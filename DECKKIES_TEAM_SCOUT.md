@@ -856,6 +856,71 @@ plans fell back to shared lists), and a function `spread` in `_folder` that
 overwrote the folder's archetype bars (a scouting report would not serialise).
 Both have tests that fail on the old code.
 
+## 4u. A brain for every win condition, and its top five (2026-10-27, brain 7.2)
+
+Asked after 7.1 went live: *"still so many archetypes missing ... in duels
+there are so many decks as well as in the top 1k which counter so many
+things"*, *"duel decks have so many varieties ... different cards with
+different archetypes"*, *"make multiple brains, like 17 win cons 17 brains ...
+rate the decks, give it to the main brain"*, and *"a click dropdown for all win
+cons showing the top 5 decks rated against the player"*.
+
+**Measured first** (deployed 7.1, the four Players.txt opponents): of 26
+families in the pool each opponent got 7-15. The rest were missing because
+their best list's worst matchup was 40-44% (most of them), because it was
+under 50% overall, or because the family had no list at all — Executioner,
+Furnace, Inferno Tower, Mega Knight, Musketeer and Suspicious Bush are played
+in duels only by small groups and missed the 10-games / 3-players bar. Pool
+options on 20 opponents:
+
+| pool | lists | families | 20 opponents | win cons listed | beating everything |
+|---|---|---|---|---|---|
+| 7.1 (duel 10 g / 3 players, line 45) | 1,410 | 26 | 12.7 s | 13 | 5 |
+| 7.1 pool, line 40 | 1,410 | 26 | 9.7 s | 20 | 5 |
+| duel 5 g / 2 players, top 2 players | 2,223 | 29 | 14.5 s | 21 | 5 |
+| duel 3 g / 2 players, top 2 players | 2,857 | 29 | 18.7 s | 21 | 6 |
+
+**Built:**
+
+- **The pool**: `DUEL_LIST_MIN_GAMES` 3, `DUEL_LIST_MIN_PILOTS` 2,
+  `TOP_MIN_PLAYERS` 2 — 2,857 lists, 29 win-condition families.
+- **A brain per win condition** (`team_scout.win_condition_brains`): every
+  list of its family rated against the opponent; the report says how many
+  lists, how many beat every family, its best worst matchup, how many the main
+  list shows, and its top `BRAIN_TOP` (5) lists — beating everything first,
+  one-card variants folded (`BRAIN_SAME` 7). On every folder as `brains`,
+  dressed by `team_analysis._brain_view` (seated, no second rating).
+- **The main brain** (`counters`): every family's answer — up to
+  `EACH_PER_FAMILY` (3) different builds that beat everything (the near-copy
+  rule keeps them six cards apart), else its closest list down to
+  `EACH_NEAR_ALL` (35%; was 45). Same for each teammate's list.
+- **Two bugs the saved boards found, fixed with tests**: (1) a family at
+  4.996% of an opponent's play was published as 5.00% and required, but
+  `played_space` compared the unrounded share and kept no list for it — every
+  deck "failed" it and the folder was empty (now the rounded share, and
+  `judged_plays` never requires a family no deck could be rated against);
+  (2) a player with no ranked or 1v1 friendly games in the window (clan-war
+  only) had no projection — now every own-deck game is read, and
+  `played.modes` says `all`.
+- **Screen**: under every suggested deck, a "Top 5 <win condition> decks ·
+  n/m beat all" dropdown (`BrainDrop`) with each deck's figure, origin pill,
+  Closest mark and archetype chips; the deck shown above is marked. A line
+  "29 win conditions · 2,857 decks rated" under the heading. Both modes.
+  Payload ~175 kB per opponent raw, ~23 kB gzipped (Caddy compresses).
+
+**Staged, the account holder's 9 saved boards (88 opponents):** decks per
+opponent median 26 (7.1: 12, 7.0: 3), of which 12.5 beat every family they
+play (7.1: 6); teammate lists 27 (12 beating everything); 0 of 11,575 rows
+mislabelled, 0 with a worst matchup under 35%; #1 figure 64.3%. The one empty
+folder left is a player the bot has stored a single 2v2 battle for. Time: 9
+boards 161 s including a cold pool build (59 s for the first); a 10v10 plan
+14-20 s, a 9-14 player scouting report 9-13 s. Brain `team-scout-7.2`. Tests:
+`test_team_scout` 252, `test_team_analysis` 373, vitest 1,844
+(`teamBrains.test.ts` new). Browser 25/25 on staged payloads (dark and light
+1440, dark 390; the dropdown opens to five decks with art, one marked as the
+deck above; a teammate's deck has one too).
+
+
 ## 4t. Every win condition, from thousands of decks (2026-10-27, brain 7.1)
 
 Asked the same day 7.0 went live: *"now it's even bad, shows only 4-5 decks — I

@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-10-27-win-condition-dropdowns',
+    date: '2026-10-27',
+    kind: 'new',
+    title: 'Team Analysis: the top 5 decks of every win condition',
+    body: [
+      'Every suggested deck now opens a list of the five best decks of its win condition against that opponent, each with its rate against every deck type they play. Different builds of one win condition that all beat everything are listed side by side.',
+      'Suggestions are drawn from nearly three thousand decks from duels and the top 1,000 ranked players, so far more win conditions are covered.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+  },
+  {
     id: '2026-10-27-every-win-condition',
     date: '2026-10-27',
     kind: 'improved',

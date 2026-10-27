@@ -1548,6 +1548,92 @@ def property_each_archetype_floor():
           "every family once it is applied", "A" in skn, str(skn))
 
 
+def property_win_condition_brains():
+    print("")
+    print("property — 7.2: a brain per win condition, the main brain lists their best")
+    plays = [{"family": "hog", "share": 0.45}, {"family": "giant", "share": 0.30},
+             {"family": "graveyard", "share": 0.25}]
+    kw = dict(limit=10, by_wincon=True, per_family=1, floor_only=True, specific=False,
+              each_floor=ts.EACH_FLOOR, each_min=10)
+    # Three Mortar builds: A and B share four cards (different builds), C is a
+    # near-copy of A (seven cards). All beat everything.
+    base = SQ_DECKS["A"]
+    other = SQ_DECKS["B"]
+    a = p_row("A", {"hog": 60, "giant": 58, "graveyard": 56}, "mortar")
+    b = dict(p_row("B", {"hog": 59, "giant": 57, "graveyard": 55}, "mortar"))
+    b["cards"] = base[:4] + other[:4]
+    b["key"] = ts.deck_key(b["cards"])
+    c = dict(p_row("C", {"hog": 58, "giant": 56, "graveyard": 54}, "mortar"))
+    c["cards"] = base[:7] + [other[0]]
+    c["key"] = ts.deck_key(c["cards"])
+    d = p_row("D", {"hog": 70, "giant": 47, "graveyard": 60}, "sparky")
+    one = [r["name"] for r in ts.counters([a, b, c, d], plays, **kw)]
+    check("without each_per_family: one list a win condition", one == ["A", "D"], str(one))
+    many = ts.counters([a, b, c, d], plays, each_per_family=3, **kw)
+    mn = [r["name"] for r in many]
+    check("with it: a second, DIFFERENT build of a win condition that beats everything stands",
+          mn == ["A", "B", "D"], str(mn))
+    check("...but never a near-copy (C shares seven cards with A)", "C" not in mn)
+    check("...and a closest row stays one a win condition",
+          [r["name"] for r in many if not r["allArchetypes"]] == ["D"])
+    rep = ts.win_condition_brains([a, b, c, d], plays, many)
+    by = {e["family"]: e for e in rep["brains"]}
+    check("the brains' report: one entry a win condition, best first",
+          [e["family"] for e in rep["brains"]] == ["mortar", "sparky"]
+          and rep["families"] == 2 and rep["lists"] == 4, str(rep))
+    check("...lists rated, how many beat everything, its best worst matchup, how many shown",
+          by["mortar"]["lists"] == 3 and by["mortar"]["beatAll"] == 3
+          and by["mortar"]["bestWorst"] == 56.0 and by["mortar"]["shown"] == 2
+          and by["sparky"]["beatAll"] == 0 and by["sparky"]["bestWorst"] == 47.0
+          and by["sparky"]["shown"] == 1, str(by))
+    check("...named by its strongest list", by["mortar"]["name"] == "A")
+
+    # SEEN LIVE: a family the screen names (5.00%, rounded) with no list behind
+    # it (4.996% kept none). Every deck "failed" it and the folder was empty.
+    ghost = plays + [{"family": "xbow", "share": 0.05}]
+    gl = [r["name"] for r in ts.counters([a, b, c, d], ghost, each_per_family=3, **kw)]
+    check("a family no deck could be rated against empties nothing",
+          gl == ["A", "B", "D"], str(gl))
+    check("...judged_plays drops it and keeps the rest",
+          [p["family"] for p in ts.judged_plays([a, d], ghost)] == ["hog", "giant", "graveyard"])
+    rep2 = ts.win_condition_brains([a, b, d], ghost, [])
+    check("...and the brains' report does not require it either", "xbow" not in rep2["required"])
+
+    # AND AT THE SOURCE: every family `played_space` publishes at 5%+ (rounded
+    # as published) has a list kept to be rated against. Random opponents.
+    import random as _r
+    rng = _r.Random(5)
+    pool_cards = [f"k{i}" for i in range(60)]
+    broken = 0
+    for _ in range(300):
+        decks = []
+        for j in range(rng.randint(3, 40)):
+            fam = f"f{rng.randint(0, 14)}"
+            decks.append({"cards": rng.sample(pool_cards, 8), "matches": rng.randint(1, 60),
+                          "wins": 0, "winCondition": fam, "family": fam,
+                          "lastSeen": "20261020T120000.000Z"})
+        sp = ts.played_space(decks)
+        kept = {th["family"] for th in sp["threats"]}
+        broken += sum(1 for p in sp["plays"] if p["share"] >= ts.PLAYS_MIN_SHARE and p["family"] not in kept)
+    check("every family published at 5%+ keeps a list (300 random opponents)", broken == 0, str(broken))
+    # The exact live case: sqrt(10) / (sqrt(3617) + sqrt(10)) = 4.995%, which
+    # publishes as 5.00%, with 25 lists of the big family crowding the rest.
+    edge = [{"cards": rng.sample(pool_cards, 8), "matches": (3617 // 25) + (1 if j < 3617 % 25 else 0),
+             "wins": 0, "winCondition": "big", "family": "big",
+             "lastSeen": "20261020T120000.000Z"} for j in range(25)]
+    # ...its ten games split over five lists, each less likely than any of
+    # the big family's, so only the "every named family keeps a list" rule
+    # can keep one.
+    edge += [{"cards": rng.sample(pool_cards, 8), "matches": 2, "wins": 0,
+              "winCondition": "small", "family": "small", "lastSeen": "20261020T120000.000Z"}
+             for _ in range(5)]
+    sp = ts.played_space(edge)
+    small = next(p for p in sp["plays"] if p["family"] == "small")
+    check("a family at 4.995% (published 5.00%) keeps its list",
+          small["share"] == 0.05 and "small" in {th["family"] for th in sp["threats"]},
+          f"{small['share']} {[th['family'] for th in sp['threats']][-3:]}")
+
+
 def main() -> int:
     print("team_scout — the coaching brain")
     case_1_many_known_decks()
@@ -1577,6 +1663,7 @@ def main() -> int:
     property_band_reads_the_opponent()
     property_speedups_are_exact()
     property_each_archetype_floor()
+    property_win_condition_brains()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 

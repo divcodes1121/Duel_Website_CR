@@ -232,7 +232,10 @@ describe('the Deck Counter’s list is the scouting engine’s', () => {
     expect(folders).toMatch(/const labels: \[string, string\]\[\] \| undefined = chipLabels\(folder\);/);
     // The scouting list and the roster-wide list pass them too — they drew no
     // chips at all before, so a scouting row showed one weighted figure only.
-    expect(folders).toMatch(/<Recommendation key=\{`\$\{r\.archetype\}-\$\{i\}`\} rec=\{r\} rank=\{i \+ 1\} labels=\{labels\} \/>/);
+    // (7.2: and its win-condition brain, for the top-5 dropdown.)
+    expect(folders).toMatch(
+      /<Recommendation\s+key=\{`\$\{r\.archetype\}-\$\{i\}`\}\s+rec=\{r\}\s+rank=\{i \+ 1\}\s+labels=\{labels\}\s+brain=\{brainOf\(r\)\}\s+\/>/,
+    );
     expect(folders).toMatch(/labels=\{chipLabels\(overall\)\}/);
   });
 

@@ -1570,3 +1570,117 @@
   color: var(--warning);
   border: 1px solid var(--warning);
 }
+
+/* 7.2: one win condition's brain, opened under a suggested deck — its top
+   decks against this opponent. A quiet toggle row; the list nests inside the
+   card in the sunken ground so it reads as part of the row above it. */
+.brainsLine {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.brainDrop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.brainToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brainToggle:hover {
+  border-color: var(--border-strong);
+}
+
+.brainCount {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.brainChevron {
+  flex: none;
+  transition: transform var(--dur-1) var(--ease);
+}
+
+.brainChevron[data-open] {
+  transform: rotate(180deg);
+}
+
+.brainList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.5rem;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+}
+
+.brainDeck {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.brainDeck:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.brainDeck[data-current] .recDeck::after {
+  content: ' · shown above';
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.brainDeckHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.brainRank {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.brainRate {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}

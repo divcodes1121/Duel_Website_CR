@@ -359,7 +359,7 @@ import math
 #: frozen into `coach_match_plans.engine`, so a plan made today can still be
 #: told apart from one made by the old scorer when phase 7's results are read
 #: back. Bump the MINOR for a weight change, the MAJOR for a shape change.
-BRAIN_VERSION = "team-scout-7.1"
+BRAIN_VERSION = "team-scout-7.2"
 
 # ── How much of the distribution is NOT their observed decks ────────────────
 
@@ -1147,7 +1147,10 @@ def played_space(decks, *, now=None, limit=None, older=None) -> dict:
         if t["family"] in seen:
             continue
         seen.add(t["family"])
-        if per[t["family"]]["share"] >= PLAYS_MIN_SHARE:
+        # ROUNDED AS PUBLISHED (7.2): `plays` carries the share to four places,
+        # and a family at 4.996% printed as 5.00% is one the screen names and
+        # 7.0 requires a deck to beat — it must have a list to be rated against.
+        if round(per[t["family"]]["share"], 4) >= PLAYS_MIN_SHARE:
             lead.append(t)
     lead = lead[:max(1, limit)]
     held = {t["key"] for t in lead}
@@ -1698,9 +1701,33 @@ EACH_MIN = 3
 #: their families beats 60-40 is not a suggestion.
 EACH_NEAR = WORST_FLOOR
 
+#: 7.2 (2026-10-27): the line for a "closest" row on Team Analysis. Asked again
+#: the same day: "still so many archetypes missing ... 17 win cons, 17 brains,
+#: give all of them". At 45 a median 13 win conditions were listed; at 40, 20;
+#: most missing families were 40-44. 35 keeps out only a deck one family they
+#: play beats 65-35.
+EACH_NEAR_ALL = 35.0
+
+#: 7.2: lists of ONE win condition that may stand when each beats every family
+#: (different builds — the near-copy rule keeps them six cards apart). Duel
+#: decks of one win condition differ ("so many varieties, different cards").
+EACH_PER_FAMILY = 3
+
 
 def _rate(row) -> float:
     return float(row.get("expectedWinRate") or 0.0)
+
+
+def judged_plays(rows, plays, *, share=EACH_SHARE):
+    """`plays` without the families at `share` or more that NO row could be
+    rated against (7.2). Such a family is a gap in the projection, not a
+    matchup any deck loses: required, it fails every deck in the pool and
+    empties the list (seen live: a 4.996% Hog family with no list behind it)."""
+    rated: set[str] = set()
+    for r in rows or []:
+        rated.update((r["vs"] if "vs" in r else vs_archetypes(r)).keys())
+    return [p for p in plays or []
+            if float(p.get("share") or 0.0) < share or p["family"] in rated]
 
 
 def each_worst(vs, plays, *, share=EACH_SHARE):
@@ -1785,7 +1812,8 @@ def worst_case(vs, plays, *, share=WORST_SHARE):
 def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
              score_key="recommendationScore", first=None, adjust=None,
              specific=True, per_family=PER_ARCHETYPE, by_wincon=False,
-             floor_only=False, band=0.0, each_floor=None, each_min=0, each_near=None):
+             floor_only=False, band=0.0, each_floor=None, each_min=0, each_near=None,
+             each_per_family=None):
     """The decks to bring: the strongest counters to what they play.
 
     `rows` are scored candidates (`score()`'s rows — each is copied, nothing
@@ -1837,6 +1865,10 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     marked `allArchetypes: True`. Each row carries `eachWorst` — its lowest
     rate over those families and which family — either way.
 
+    `each_per_family` (7.2): decks that beat every family may stand up to this
+    many to one win condition (`per_family` still caps everything else). The
+    near-copy rule keeps them different builds: no two share six cards.
+
     `first` is a row (matched by `key`) that leads whatever its figure — the
     #1 a squad assigned this teammate. Each row comes back with `vs` (its rate
     against each family) and `answers` (the families it is the list's best
@@ -1844,6 +1876,11 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     one row always does when anything was scored at all.
     """
     pool = []
+    each_plays = plays
+    if each_floor is not None:
+        # Only the families some row could be rated against are required.
+        each_plays = judged_plays([{"vs": r["vs"] if "vs" in r else vs_archetypes(r)}
+                                   for r in rows or []], plays)
     for r in rows or []:
         c = dict(r)
         if "vs" not in c:
@@ -1856,7 +1893,7 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         if c["worst"] is not None and c["worst"]["rate"] < WORST_FLOOR:
             c["_v"] -= HOLE_COST
         if each_floor is not None:
-            low, fam = each_worst(c["vs"], plays)
+            low, fam = each_worst(c["vs"], each_plays)
             c["eachWorst"] = {"family": fam, "rate": low}
             c["_each"] = low is not None or fam is None
             c["_each"] = c["_each"] and (low is None or low >= each_floor)
@@ -1906,7 +1943,10 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         """Whether `r` may join the list (ignoring the row `skip`, about to go)."""
         a = cap_key(r)
         n = count.get(a, 0) - (1 if skip is not None and cap_key(skip) == a else 0)
-        if n >= per_family:
+        cap = per_family
+        if each_per_family is not None and r.get("_each") and each_floor is not None:
+            cap = max(per_family, each_per_family)
+        if n >= cap:
             return False
         if r["_round"] and not relaxed[0]:
             held = sum(1 for c in chosen if c["_round"] and c is not skip)
@@ -2046,6 +2086,83 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         if each_floor is not None:
             c["allArchetypes"] = bool(ok)
     return out
+
+
+#: Decks each win-condition brain hands the screen's dropdown (7.2): "a click
+#: dropdown for all win cons showing the top 5 decks rated against the player".
+BRAIN_TOP = 5
+
+#: Two lists of one brain sharing this many cards are one deck in its top five
+#: (a one-card variant); the better-rated stands.
+BRAIN_SAME = 7
+
+
+def win_condition_brains(rows, plays, shown, *, each_floor=EACH_FLOOR, share=EACH_SHARE,
+                         top=BRAIN_TOP):
+    """THE WIN-CONDITION BRAINS' REPORT (7.2): one entry per win condition in
+    the rated pool — how many of its lists were rated against this opponent,
+    how many beat every family they play, its strongest list's worst matchup,
+    and how many of its lists the main brain (`counters`) put on the list.
+    `decks` is its `top` lists against this opponent — those beating every
+    family first, then by the figure, one-card variants folded — as the rows
+    themselves (the caller dresses them).
+
+    Asked for (2026-10-27): "17 win cons, 17 brains — each gets all the decks
+    of its win con, rates them, gives them to the main brain". `counters` IS
+    the main brain and its per-win-condition cap is what makes each family a
+    brain of its own; this says, family by family, what each one found, so the
+    answer can be checked rather than taken on trust. Best first: most lists
+    beating everything, then the highest worst matchup.
+    """
+    plays = judged_plays(rows, plays, share=share)
+    fams = [p["family"] for p in plays or [] if float(p.get("share") or 0.0) >= share]
+    listed: dict[str, int] = {}
+    for r in shown or []:
+        k = str(r.get("winFamily") or r.get("winCon") or "")
+        listed[k] = listed.get(k, 0) + 1
+    per: dict[str, dict] = {}
+    for r in rows or []:
+        k = str(r.get("winFamily") or r.get("winCon") or "")
+        if not k:
+            continue
+        e = per.get(k)
+        if e is None:
+            e = per[k] = {"family": k, "lists": 0, "beatAll": 0, "bestWorst": None,
+                          "bestRate": None, "shown": listed.get(k, 0)}
+        e["lists"] += 1
+        low, fam = each_worst(r.get("vs") or vs_archetypes(r), plays, share=share)
+        if (low is not None and low >= each_floor) or (low is None and fam is None):
+            e["beatAll"] += 1
+        if low is not None and (e["bestWorst"] is None or low > e["bestWorst"]):
+            e["bestWorst"] = round(low, 1)
+        rate = _rate(r)
+        if e["bestRate"] is None or rate > e["bestRate"]:
+            e["bestRate"] = round(rate, 1)
+            e["name"] = r.get("name") or k
+    # EACH BRAIN'S TOP LISTS: beating everything first, then the figure.
+    by_fam: dict[str, list] = {}
+    for r in rows or []:
+        k = str(r.get("winFamily") or r.get("winCon") or "")
+        if k:
+            low, fam = each_worst(r.get("vs") or vs_archetypes(r), plays, share=share)
+            ok = (low is not None and low >= each_floor) or (low is None and fam is None)
+            by_fam.setdefault(k, []).append((not ok, -_rate(r), r.get("key") or "", r, low, fam, ok))
+    for k, e in per.items():
+        picks: list = []
+        seen_sets: list = []
+        for _bad, _neg, _key, r, low, fam, ok in sorted(by_fam.get(k, []), key=lambda x: x[:3]):
+            cs = set(r.get("cards") or [])
+            if any(len(cs & o) >= BRAIN_SAME for o in seen_sets):
+                continue
+            seen_sets.append(cs)
+            picks.append({"row": r, "allArchetypes": ok,
+                          "eachWorst": {"family": fam, "rate": low}})
+            if len(picks) >= top:
+                break
+        e["decks"] = picks
+    out = sorted(per.values(), key=lambda e: (-e["beatAll"], -(e["bestWorst"] or 0), e["family"]))
+    return {"families": len(out), "lists": sum(e["lists"] for e in out),
+            "required": fams, "brains": out}
 
 
 def answers(rows, plays, *, per=ANSWERS_PER_FAMILY, families=ANSWER_FAMILIES):
@@ -2493,7 +2610,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                   new_slots: int = NEW_SLOTS, share_max: int = SHARE_MAX,
                   min_list: int = MIN_LIST, per_wincon: int = PER_ARCHETYPE,
                   each_floor: float | None = None, each_min: int = 0,
-                  plays=None, each_near: float | None = None):
+                  plays=None, each_near: float | None = None,
+                  each_per_family: int | None = None):
     """Every teammate's list against ONE opponent, each built out of that
     teammate (5.0; see the section note).
 
@@ -2548,6 +2666,12 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
         line = each_floor if each_near is None else min(each_floor, each_near)
 
     worst_of: dict[int, tuple] = {}
+    if each_floor is not None:
+        # The families some row could be rated against (`judged_plays`); a
+        # personal shift moves rates, never which families are rated.
+        plays = judged_plays([{"vs": r["vs"] if "vs" in r else vs_archetypes(r)}
+                              for r in list(pool or [])
+                              + [o for p in players for o in (p.get("own") or [])]], plays)
 
     def alive(r, p) -> bool:
         if line is None:
@@ -2621,7 +2745,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
         mine = [r for r in rows if r.get("owner")] + held[tag]
         picked = counters(mine, plays, limit=limit, score_key="personalScore", specific=False,
                                   by_wincon=True, per_family=per_wincon, floor_only=True,
-                                  adjust=_familiar_first, each_floor=each_floor)
+                                  adjust=_familiar_first, each_floor=each_floor,
+                                  each_per_family=each_per_family)
         want = min(min_list, limit)
         if len(picked) < want:
             # Topped up, never replaced: what the list holds is kept.
@@ -2632,7 +2757,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                                   score_key="personalScore", specific=False,
                                   by_wincon=True, per_family=per_wincon, floor_only=True,
                                   adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
-                                  + _familiar_first(c), each_floor=each_floor)
+                                  + _familiar_first(c), each_floor=each_floor,
+                                  each_per_family=each_per_family)
                 if len(picked) >= want:
                     break
         if each_floor is not None and len(picked) < min(each_min, limit):
@@ -2646,7 +2772,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                               by_wincon=True, per_family=per_wincon, floor_only=True,
                               adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
                               + _familiar_first(c),
-                              each_floor=each_floor, each_min=each_min, each_near=each_near)
+                              each_floor=each_floor, each_min=each_min, each_near=each_near,
+                              each_per_family=each_per_family)
         for r in picked:
             if not r.get("owner") and r["key"] not in {h["key"] for h in held[tag]}:
                 taken[r["key"]] = taken.get(r["key"], 0) + 1
