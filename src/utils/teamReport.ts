@@ -1,4 +1,5 @@
 import { latinName, printableName } from './report/text';
+import { gamesLabel, modeSplit, type ModeKind } from './teamModes';
 import type {
   TeamFolder,
   TeamMatchupRow,
@@ -203,10 +204,13 @@ function theirLine(d: {
   winRate: number;
   useRate: number;
   avgElixir: number | null;
+  modes?: Partial<Record<ModeKind, number>>;
 }): DeckLine {
+  // The games by kind (2026-11-03), when the server sent them.
+  const split = modeSplit(d.modes);
   return {
     name: d.name,
-    meta: `${int(d.matches)} games · ${pct(d.winRate)} win · ${pct(d.useRate)} of their play${
+    meta: `${int(d.matches)} games${split ? ` (${split})` : ''} · ${pct(d.winRate)} win · ${pct(d.useRate)} of their play${
       d.avgElixir != null ? ` · ${d.avgElixir.toFixed(1)} elixir` : ''
     }`,
     value: pct(d.useRate),
@@ -662,6 +666,22 @@ function folderBlocks(
       note: 'Squad-wide, deduplicated by deck, chosen to cover their spread',
       decks: folder.recommended.map((r) => recLine(r, { showOwner: true })),
     });
+
+    // AGAINST WHAT THEY PLAY MOST (2026-11-03), the screen's block above the
+    // list: the figure is the rate against their main deck types.
+    const main = folder.mainCounters;
+    if (main && main.decks.length) {
+      blocks.push({
+        kind: 'decks',
+        heading: 'Against what they play most',
+        note: main.mains.map((m) => `${m.name} ${gamesLabel(100 * m.gameShare)}`).join(' · '),
+        decks: main.decks.map((r) => ({
+          ...recLine(r, { showOwner: true }),
+          value: r.vsMain !== undefined ? pct(r.vsMain) : pct(r.expectedWinRate),
+          valueNote: 'vs their main decks',
+        })),
+      });
+    }
 
     // The relationship, drawn. Their most-played deck against the answer, so
     // the reader can see both eight-card lists at once rather than holding one

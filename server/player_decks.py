@@ -263,6 +263,28 @@ def _own_rows(tag: str, since: str | None, until: str | None, keep=None
 #: `played(..., modes=RANKED_FRIENDLY)`: ranked and 1v1 friendly games only.
 RANKED_FRIENDLY = "ranked_friendly"
 
+#: The kinds a deck's games are split into on Team Analysis' "They play"
+#: (2026-11-03): "58 ranked · 9 ladder · 12 friendly · 3 duel".
+MODE_KINDS = ("ranked", "ladder", "friendly", "duel", "other")
+
+
+def mode_kind(game_mode: str) -> str:
+    """Which of `MODE_KINDS` one game's mode counts under. Ranked is Path of
+    Legends (every `Ranked1v1_*`), ladder is trophy road (`Ladder`), friendly a
+    plain 1v1 friendly; a native duel game is counted from the duel index as
+    `duel`; anything else (clan war, a tournament, a special friendly) is
+    `other`."""
+    m = (game_mode or "").strip().lower()
+    if m.startswith("ranked1v1"):
+        return "ranked"
+    if m == "ladder":
+        return "ladder"
+    if m == "friendly":
+        return "friendly"
+    if dx.is_native_duel(m):
+        return "duel"
+    return "other"
+
 #: The duel index's modes a ranked-and-friendly read keeps (lower case).
 _FRIENDLY_DUELS = ("duel_1v1_friendly",)
 
@@ -296,6 +318,8 @@ def played(tag: str, since: str | None = None, until: str | None = None,
 
     # key -> [wins, losses, draws, last seen, stored-order cards, archetype]
     per: dict[str, list] = {}
+    # key -> {kind: games}, `MODE_KINDS` (Team Analysis' per-mode split).
+    kinds: dict[str, dict[str, int]] = {}
     # The forms a deck was last SEEN fielded with, newest first (the rows are).
     marks: dict[str, dict] = {}
     loadouts = 0
@@ -327,6 +351,9 @@ def played(tag: str, since: str | None = None, until: str | None = None,
             e = per[key] = [0, 0, 0, r["battle_time"], cards, r["archetype"]]
         outcome = rb._outcome(r["result"], r["crowns"], r["opp_crowns"])
         e[0 if outcome == "win" else 1 if outcome == "loss" else 2] += 1
+        k = kinds.setdefault(key, {})
+        kind = mode_kind(r["mode"])
+        k[kind] = k.get(kind, 0) + 1
 
     duel_games = 0
     # key -> how many of the games counted above were DUEL games. The
@@ -362,11 +389,13 @@ def played(tag: str, since: str | None = None, until: str | None = None,
             e[0] += wins
             # A duel game has a winner — a level game takes a tiebreak tower.
             e[1] += games - wins
+            k = kinds.setdefault(key, {})
+            k["duel"] = k.get("duel", 0) + games
 
     return {
         "per": per, "marks": marks, "loadouts": loadouts,
         "duelGames": duel_games, "duelIndex": duel_ok,
-        "duel": duel_per,
+        "duel": duel_per, "kinds": kinds,
         "archiveUsed": archive_used, "hidden": hidden,
     }
 

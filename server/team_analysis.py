@@ -380,13 +380,33 @@ SCOUT_BAND = 1.0
 SCOUT_PER_WINCON = 1
 MATE_PER_WINCON = 1
 
+#: AT MOST TWO BUILDS OF ONE WIN CONDITION ON THE LIST (2026-11-03). 7.2 let
+#: up to `team_scout.EACH_PER_FAMILY` (3) builds that beat every archetype
+#: stand side by side, and the top of a board read "Bridge Spam, Bridge Spam,
+#: Bridge Spam" for opponent after opponent. The other builds are in that win
+#: condition's top-5 dropdown (the brains). Replayed on 160 opponents (decks
+#: read to 27 Oct, judged by a card model fitted only on games from 28 Oct on
+#: against what they really played to 3 Nov), with `CARD_CAP` and
+#: `USAGE_WEIGHT` 1.0: one a win condition gave 10 win conditions in a top ten
+#: (6.2 before) for -2.1 on the top ten's judged rate; two gave 8.2, the least
+#: repetition between opponents (most repeated list 35.6% -> 26.9%) for -1.3
+#: (top three -0.4, #1 +0.1). Two was chosen.
+SCOUT_EACH_PER_FAMILY = 2
+
+#: Card cap on the top of a list and the usage weight in the choosing
+#: (2026-11-03): see `team_scout.CARD_CAP` and `team_scout.USAGE_WEIGHT`.
+LIST_CARD_CAP = None  # set below, once `scout` is imported
+LIST_USAGE_WEIGHT = None
+
 #: A ladder record quoted as "vs the field" needs this many games (5.1).
 OVERALL_MIN_GAMES = 20
 
-#: Opponent decks shown on the left of a folder, and the spread they weight.
+#: Opponent decks shown on the left of a folder ("They play"), most played
+#: first. Ten since 2026-11-03 ("7 - 10 decks with the frequency"): a player
+#: with hundreds of lists had six cover as little as 15% of their games.
 #: Their long tail is noise for this purpose: a deck played once tells you
 #: nothing about what they will bring to a match.
-OPPONENT_DECKS = 6
+OPPONENT_DECKS = 10
 
 #: THIS FLOOR NOW APPLIES ONLY TO THE DISPLAYED SPREAD, NOT TO THE PROJECTION.
 #:
@@ -592,6 +612,7 @@ def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
         return None
     per, marks = got["per"], got["marks"]
     duel_per = got.get("duel") or {}
+    kinds = got.get("kinds") or {}
     rows = []
     for key, (w, l, d, last, cards, arch) in per.items():
         n = w + l + d
@@ -603,6 +624,9 @@ def _own_decks(tag: str, since: str | None, until: str | None) -> dict | None:
             "losses": l, "draws": d, "winCondition": arch, "lastSeen": last or None,
             # How many of those games were duel games (the projection's weight).
             "duelMatches": min(n, int(duel_per.get(key) or 0)),
+            # The same games by kind — ranked / ladder / friendly / duel /
+            # other (`player_decks.MODE_KINDS`), drawn under the deck.
+            "modes": {k: v for k, v in (kinds.get(key) or {}).items() if v},
         })
     rows.sort(key=lambda r: r["deckHash"])
     rows.sort(key=lambda r: r["lastSeen"] or "", reverse=True)
@@ -937,15 +961,52 @@ def _plays(decks: list[dict], older: list[dict] | None = None) -> dict:
     return out
 
 
+def _game_share(p: dict, plays: list[dict]) -> float:
+    """A family's share of the opponent's GAMES in the window (0-1), as
+    opposed to `share`, the flattened chance they bring it (4.0)."""
+    total = sum(int(q.get("games") or 0) for q in plays) or 1
+    return round(int(p.get("games") or 0) / total, 4)
+
+
+def _card_cap():
+    """`LIST_CARD_CAP`, or the brain's `CARD_CAP` when unset (a replay can set
+    either; None-or-False turns it off)."""
+    return scout.CARD_CAP if LIST_CARD_CAP is None else (LIST_CARD_CAP or None)
+
+
+def _usage_weight() -> float:
+    return scout.USAGE_WEIGHT if LIST_USAGE_WEIGHT is None else float(LIST_USAGE_WEIGHT)
+
+
+def _main_view(rows: list[dict], plays: list[dict], names: dict, finish) -> dict | None:
+    """"Against what they play most" (2026-11-03): the decks that beat their
+    most-played families by real games (`scout.main_counters`), dressed like
+    every other row, with the families named. None with nothing to show."""
+    got = scout.main_counters(rows, plays)
+    if not got["decks"]:
+        return None
+    return {
+        "mains": [{**m, "name": names.get(m["family"]) or dcx._label(m["family"] or "other")}
+                  for m in got["mains"]],
+        "decks": finish(got["decks"]),
+    }
+
+
 def _spread_of(plays: list[dict]) -> list[dict]:
     """The archetype bars on the left of a folder, from the SAME shares the
     list on the right was scored against — so "they play Giant 79%" and the
     `Giant` chip under a deck are one number's two readings. Families under
     two percent are counted and not drawn."""
+    games = sum(int(p.get("games") or 0) for p in plays) or 1
     return [
         {"archetype": p["family"], "name": p["name"], "style": p.get("style"),
          "games": p["games"], "weight": p["share"],
          "share": round(100.0 * p["share"], 1),
+         # THE HISTORY BESIDE THE CHANCE (2026-11-03): their real share of
+         # games in the window. A player on Hog Rider 77% of the time reads
+         # "26% likely" because the chance is deliberately flattened (4.0) —
+         # both numbers are shown so neither is mistaken for the other.
+         "gameShare": round(100.0 * int(p.get("games") or 0) / games, 1),
          "key": f"archetype:{p['family']}", "evidence": scout.OBSERVED,
          "likelihood": p["share"]}
         for p in plays if p["share"] >= 0.02
@@ -3766,7 +3827,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                                                     each_floor=scout.EACH_FLOOR,
                                                     each_min=PER_PLAYER_TOP_N,
                                                     each_near=scout.EACH_NEAR_ALL,
-                                                    each_per_family=scout.EACH_PER_FAMILY,
+                                                    each_per_family=SCOUT_EACH_PER_FAMILY,
+                                                    usage_weight=_usage_weight(),
                                                     plays=plays)
             who = {m["tag"]: m["name"] for m in blue}
             for c in cover:
@@ -3789,7 +3851,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
                               each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
                               each_near=scout.EACH_NEAR_ALL,
-                              each_per_family=scout.EACH_PER_FAMILY)
+                              each_per_family=SCOUT_EACH_PER_FAMILY,
+                              card_cap=_card_cap(), usage_weight=_usage_weight())
 
     per_player = []
     for mate in blue:
@@ -3834,7 +3897,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
                               each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
                               each_near=scout.EACH_NEAR_ALL,
-                              each_per_family=scout.EACH_PER_FAMILY)
+                              each_per_family=SCOUT_EACH_PER_FAMILY,
+                              card_cap=_card_cap(), usage_weight=_usage_weight())
     # THE WIN-CONDITION BRAINS' REPORT (7.2): what each win condition's lists
     # did against this opponent, and how many the main brain listed.
     try:
@@ -3848,6 +3912,11 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     for r in recommended:
         if blue and not r.get("owner"):
             r["fill"] = True
+    try:
+        main = _main_view(pool_rows(), plays, names, finish) if threats else None
+    except Exception:  # noqa: BLE001 - an extra block, never a reason to fail the folder
+        traceback.print_exc()
+        main = None
 
     duel = ({"available": False} if ctx is None or not ctx.on else {
         "available": True,
@@ -3876,6 +3945,8 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # scored against, and the names of the chips under each deck.
         "plays": [{"family": p["family"], "archetype": p["archetype"],
                    "name": p["name"], "share": p["share"], "games": p["games"],
+                   # Their real share of games (2026-11-03), beside the chance.
+                   "gameShare": _game_share(p, plays),
                    "decks": p["decks"], "played": p.get("played"),
                    "duelGames": p.get("duelGames")}
                   for p in plays if p["share"] >= scout.PLAYS_MIN_SHARE],
@@ -3896,6 +3967,9 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # Empty in a scouting report (nobody to assign).
         "squadCover": cover,
         "brains": brains,
+        # AGAINST WHAT THEY PLAY MOST (2026-11-03): the best decks against
+        # their one or two most-played families, by real games.
+        "mainCounters": main,
         "considered": len(cards),
         "brain": scout.BRAIN_VERSION,
         # Said out loud rather than left to be inferred from an empty list.
@@ -4019,7 +4093,8 @@ def _combined(red: list[dict], cards: list[_Candidate],
                               by_wincon=True, per_family=SCOUT_PER_WINCON, floor_only=True,
                               each_floor=scout.EACH_FLOOR, each_min=ALL_WINCONS,
                               each_near=scout.EACH_NEAR_ALL,
-                              each_per_family=scout.EACH_PER_FAMILY)
+                              each_per_family=SCOUT_EACH_PER_FAMILY,
+                              card_cap=_card_cap(), usage_weight=_usage_weight())
 
     # THE DUELS, ROSTER-WIDE: every opponent's own duel games pooled, for the
     # duel figures on each row.
@@ -4059,6 +4134,8 @@ def _combined(red: list[dict], cards: list[_Candidate],
         "spread": _spread_of(plays),
         "plays": [{"family": p["family"], "archetype": p["archetype"],
                    "name": p["name"], "share": p["share"], "games": p["games"],
+                   # Their real share of games (2026-11-03), beside the chance.
+                   "gameShare": _game_share(p, plays),
                    "decks": p["decks"], "played": p.get("played"),
                    "duelGames": p.get("duelGames")}
                   for p in plays if p["share"] >= scout.PLAYS_MIN_SHARE],

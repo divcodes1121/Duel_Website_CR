@@ -1634,6 +1634,112 @@ def property_win_condition_brains():
           f"{small['share']} {[th['family'] for th in sp['threats']][-3:]}")
 
 
+# ── 2026-11-03: card cap, usage weight, "against what they play most" ──────
+
+def u_row(name, vs, wincon, cards, rate=None):
+    """A bare pool row: its rates against each family, its win condition and
+    eight cards. `rate` (the printed figure) defaults to the plain mean."""
+    r = rate if rate is not None else sum(vs.values()) / len(vs)
+    return {"key": ",".join(sorted(cards)), "name": name, "cards": list(cards),
+            "vs": dict(vs), "winCon": wincon, "archetype": wincon,
+            "expectedWinRate": r, "recommendationScore": r}
+
+
+def deck8(*extra, base=("a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8")):
+    """Eight cards: `extra` first, then the base cards to fill."""
+    out = list(extra)
+    for c in base:
+        if len(out) >= 8:
+            break
+        if c not in out:
+            out.append(c)
+    return out
+
+
+def property_usage_and_variety():
+    print("")
+    print("property — 2026-11-03: card cap, usage weight, against what they play most")
+    # They play Hog 77% of their games; the chance (flattened) says 45%.
+    plays = [{"family": "hog", "share": 0.45, "games": 77},
+             {"family": "giant", "share": 0.30, "games": 13},
+             {"family": "graveyard", "share": 0.25, "games": 10}]
+    gs = ts.game_shares(plays)
+    check("game_shares reads games, not the chance",
+          abs(gs["hog"] - 0.77) < 1e-9 and abs(sum(gs.values()) - 1) < 1e-9, str(gs))
+    check("vs_weighted renormalises over the families rated",
+          ts.vs_weighted({"hog": 80, "giant": 40}, {"hog": 0.5, "giant": 0.5, "x": 1}) == 60.0)
+    check("vs_weighted(need_all) refuses a row missing a family",
+          ts.vs_weighted({"hog": 80}, {"hog": 0.5, "giant": 0.5}, need_all=True) is None)
+
+    # USAGE: two lists of one win condition, one per win condition allowed. B
+    # is a hair higher on the printed figure; A crushes the Hog they play 77%.
+    a = u_row("A", {"hog": 80, "giant": 52, "graveyard": 52}, "royal-hogs",
+              deck8("royal-hogs", "x1"), rate=61.0)
+    bb = u_row("B", {"hog": 55, "giant": 66, "graveyard": 64}, "royal-hogs",
+               deck8("royal-hogs", "x2", base=("b1", "b2", "b3", "b4", "b5", "b6", "b7")), rate=61.5)
+    kw = dict(limit=5, by_wincon=True, per_family=1, floor_only=True, specific=False)
+    plain = [r["name"] for r in ts.counters([a, bb], plays, **kw)]
+    used = ts.counters([a, bb], plays, usage_weight=0.5, **kw)
+    check("without the usage weight the higher figure represents the win condition",
+          plain == ["B"], str(plain))
+    check("with it, the list that beats what they play most does",
+          [r["name"] for r in used] == ["A"], str([r["name"] for r in used]))
+    check("...the printed figure is unchanged", used[0]["expectedWinRate"] == 61.0)
+    check("...and the row carries vsPlay, weighted by games",
+          abs(used[0]["vsPlay"] - round(0.77 * 80 + 0.13 * 52 + 0.10 * 52, 1)) < 1e-9,
+          str(used[0].get("vsPlay")))
+
+    # CARD CAP: five rows sharing one card, two that do not; window 4, most 2.
+    rows = [u_row("R%d" % i, {"hog": 70 - i, "giant": 70 - i, "graveyard": 70 - i},
+                  "wc%d" % i, deck8("bbarrel", "w%d" % i,
+                                    base=tuple("c%d_%d" % (i, j) for j in range(8))))
+            for i in range(5)]
+    rows += [u_row("S%d" % i, {"hog": 60 - i, "giant": 60 - i, "graveyard": 60 - i},
+                   "wd%d" % i, deck8("s%d" % i, base=tuple("d%d_%d" % (i, j) for j in range(8))))
+             for i in range(2)]
+    capped = ts.cap_cards(rows, 4, 2)
+    names = [r["name"] for r in capped]
+    check("cap_cards: no card in more than `most` of the first `window`",
+          names[:4] == ["R0", "R1", "S0", "S1"], str(names))
+    check("...the rows it moves wait just below, in their own order",
+          names[4:] == ["R2", "R3", "R4"], str(names))
+    check("...nothing is lost", sorted(names) == sorted(r["name"] for r in rows))
+    short = ts.cap_cards(rows[:5], 4, 2)
+    check("too few rows to fill the head under the cap: filled in the list's own order",
+          [r["name"] for r in short] == ["R0", "R1", "R2", "R3", "R4"],
+          str([r["name"] for r in short]))
+    kept = ts.cap_cards(rows, 4, 2, keep=rows[2])
+    check("a kept row (a squad's #1) is never moved", rows[2] in kept[:4])
+    listed = [r["name"] for r in ts.counters(rows, plays, limit=7, by_wincon=True, per_family=1,
+                                              floor_only=True, specific=False, card_cap=(4, 2))]
+    check("counters(card_cap=) applies it to the list as shown",
+          listed[:4] == ["R0", "R1", "S0", "S1"], str(listed))
+
+    # MAIN COUNTERS: their main families are hog (77%) and giant (13%).
+    m1 = u_row("M1", {"hog": 85, "giant": 60, "graveyard": 52}, "royal-hogs", deck8("m1"))
+    m2 = u_row("M2", {"hog": 70, "giant": 75, "graveyard": 55}, "golem",
+               deck8("m2", base=tuple("e%d" % j for j in range(8))))
+    m3 = u_row("M3", {"hog": 90, "giant": 70, "graveyard": 45}, "pekka",
+               deck8("m3", base=tuple("f%d" % j for j in range(8))))
+    m4 = u_row("M4", {"hog": 84, "giant": 58, "graveyard": 51}, "royal-hogs",
+               deck8("m4", base=tuple("g%d" % j for j in range(8))))
+    got = ts.main_counters([m1, m2, m3, m4], plays, n=3, families=1, min_share=0.10)
+    check("main families are the most played by games",
+          [m["family"] for m in got["mains"]] == ["hog"], str(got["mains"]))
+    names = [r["name"] for r in got["decks"]]
+    check("best against the main family first, one per win condition, every family still beaten",
+          names == ["M1", "M2"], str(names))
+    check("...a deck that loses to a family they play is left out (M3)", "M3" not in names)
+    check("...vsMain is the rate against the main family", got["decks"][0]["vsMain"] == 85.0)
+    two = ts.main_counters([m1, m2, m4], plays, n=3, families=2, min_share=0.10)
+    check("two main families are weighted by their games",
+          two["decks"][0]["name"] == "M1"
+          and abs(two["decks"][0]["vsMain"] - round((0.77 * 85 + 0.13 * 60) / 0.90, 1)) < 1e-9,
+          str([(r["name"], r["vsMain"]) for r in two["decks"]]))
+    none = ts.main_counters([m1], [{"family": "hog", "share": 1.0, "games": 0}])
+    check("no games, no main family, no decks", none == {"mains": [], "decks": []}, str(none))
+
+
 def main() -> int:
     print("team_scout — the coaching brain")
     case_1_many_known_decks()
@@ -1664,6 +1770,7 @@ def main() -> int:
     property_speedups_are_exact()
     property_each_archetype_floor()
     property_win_condition_brains()
+    property_usage_and_variety()
     print(f"\n{PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
 

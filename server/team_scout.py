@@ -1809,11 +1809,146 @@ def worst_case(vs, plays, *, share=WORST_SHARE):
     return worst
 
 
+#: THE TOP OF A LIST IS NOT ONE CARD'S (2026-11-03). Measured on a live board:
+#: Barbarian Barrel was in 10-15 of ~30 suggested decks for every opponent.
+#: In the first `CARD_CAP[0]` rows of a list as shown no card is in more than
+#: `CARD_CAP[1]` (`cap_cards`). Replayed: most copies of one card in a top ten
+#: 5.5 -> 3.3, for about one point on the top ten's judged rate.
+CARD_CAP = (10, 3)
+
+#: HOW MUCH WHAT THEY REALLY PLAY DECIDES THE CHOOSING (2026-11-03, "usage
+#: countering opp deck frequency"). The printed figure weighs each family by
+#: the flattened chance they bring it (`TEMPER`, measured in 4.0); a row's
+#: `vsPlay` weighs it by their real share of GAMES. In the choosing only, a
+#: row gains `USAGE_WEIGHT` x (vsPlay - figure) points — a deck that crushes
+#: the deck they play 77% of the time is preferred over one that is merely
+#: level with it at the same figure. Replayed (160 opponents, judged out of
+#: time): 0.5 -> #1 vs their most-played deck +0.2, 1.0 -> +0.5 [+0.03, +0.93].
+USAGE_WEIGHT = 1.0
+
+#: "AGAINST WHAT THEY PLAY MOST" (2026-11-03): the best decks against their
+#: `MAIN_FAMILIES` most-played families (each at `MAIN_MIN_SHARE` of their
+#: games or more), `MAIN_COUNTERS` of them, one per win condition.
+MAIN_COUNTERS = 3
+MAIN_FAMILIES = 2
+MAIN_MIN_SHARE = 0.10
+
+
+def game_shares(plays) -> dict[str, float]:
+    """{family: share of the opponent's GAMES in the window} (0-1), from
+    `played_space`'s `plays` rows' `games` — the history, not the chance."""
+    total = sum(int(p.get("games") or 0) for p in plays or []) or 0
+    if total <= 0:
+        return {}
+    return {p["family"]: int(p.get("games") or 0) / total
+            for p in plays or [] if int(p.get("games") or 0) > 0}
+
+
+def vs_weighted(vs: dict, weights: dict[str, float], *, need_all: bool = False):
+    """A row's rate against families weighted by `weights`, over the families
+    it is rated against (renormalised); None when it is rated against none, or,
+    with `need_all`, against not every one of them."""
+    num = den = 0.0
+    for fam, w in weights.items():
+        r = vs.get(fam)
+        if r is None:
+            if need_all:
+                return None
+            continue
+        num += w * float(r)
+        den += w
+    return num / den if den > 0 else None
+
+
+def cap_cards(rows, window, most, *, keep=None):
+    """`rows` in the same order, except that in the first `window` no card is
+    in more than `most` of them: a row that would put a card over the cap
+    waits just below the first `window`, in its own order. `keep` (a row,
+    e.g. a squad's assigned #1) is never moved."""
+    head, waiting = [], []
+    used: dict[str, int] = {}
+    for r in rows:
+        if len(head) >= window:
+            waiting.append(r)
+            continue
+        cards = r.get("cards") or []
+        if r is not keep and any(used.get(k, 0) >= most for k in cards):
+            waiting.append(r)
+            continue
+        head.append(r)
+        for k in cards:
+            used[k] = used.get(k, 0) + 1
+    if len(head) < window and waiting:
+        # Not enough rows to fill the head under the cap: the earliest waiting
+        # ones fill it rather than leaving the top short, and the head is put
+        # back in the list's own order.
+        fill = waiting[:window - len(head)]
+        order = {id(r): i for i, r in enumerate(rows)}
+        head = sorted(head + fill, key=lambda r: order[id(r)])
+        waiting = waiting[len(fill):]
+    return head + waiting
+
+
+def main_counters(rows, plays, *, n=MAIN_COUNTERS, families=MAIN_FAMILIES,
+                  min_share=MAIN_MIN_SHARE, each_floor=EACH_FLOOR, share=EACH_SHARE):
+    """The decks that beat what this opponent plays MOST.
+
+    Their `families` most-played families by real games (each at least
+    `min_share` of them) are the target; each row is rated against them by
+    their game shares (`vsMain`) and must still clear `each_floor` against
+    EVERY family they play at `share` or more (7.0's rule) and `FLOOR_RATE`
+    overall. Best `vsMain` first, one deck per win condition, no two sharing
+    `SAME_DECK_OVERLAP` cards. Returns `{"mains": [{family, gameShare}],
+    "decks": [row copies with vsMain and eachWorst]}`; empty decks when they
+    have no main family or nothing clears the rules.
+    """
+    usage = game_shares(plays)
+    mains = sorted(((f, s) for f, s in usage.items() if s >= min_share),
+                   key=lambda fs: (-fs[1], fs[0]))[:max(0, families)]
+    out = {"mains": [{"family": f, "gameShare": round(s, 4)} for f, s in mains],
+           "decks": []}
+    if not mains or not rows:
+        return out
+    weights = dict(mains)
+    rated = [{"vs": r["vs"] if "vs" in r else vs_archetypes(r)} for r in rows]
+    each_plays = judged_plays(rated, plays, share=share)
+    cands = []
+    for r, v in zip(rows, rated):
+        vs = v["vs"]
+        vm = vs_weighted(vs, weights, need_all=True)
+        if vm is None or _rate(r) < FLOOR_RATE:
+            continue
+        low, fam = each_worst(vs, each_plays, share=share)
+        if low is not None and low < each_floor:
+            continue
+        c = dict(r)
+        c["vs"] = vs
+        c["vsMain"] = round(vm, 1)
+        c["eachWorst"] = {"family": fam, "rate": low}
+        cands.append(c)
+    cands.sort(key=lambda c: (-c["vsMain"], -_rate(c), c["key"]))
+    seen_fam: set[str] = set()
+    subs: set[frozenset] = set()
+    for c in cands:
+        if len(out["decks"]) >= n:
+            break
+        fam = str(c.get("winFamily") or c.get("winCon") or c.get("archetype") or "")
+        if fam in seen_fam:
+            continue
+        mine = _subsets(frozenset(c.get("cards") or []), SAME_DECK_OVERLAP)
+        if any(s in subs for s in mine):
+            continue
+        seen_fam.add(fam)
+        subs.update(mine)
+        out["decks"].append(c)
+    return out
+
+
 def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
              score_key="recommendationScore", first=None, adjust=None,
              specific=True, per_family=PER_ARCHETYPE, by_wincon=False,
              floor_only=False, band=0.0, each_floor=None, each_min=0, each_near=None,
-             each_per_family=None):
+             each_per_family=None, card_cap=None, usage_weight=0.0):
     """The decks to bring: the strongest counters to what they play.
 
     `rows` are scored candidates (`score()`'s rows — each is copied, nothing
@@ -1869,6 +2004,15 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     many to one win condition (`per_family` still caps everything else). The
     near-copy rule keeps them different builds: no two share six cards.
 
+    `card_cap` (2026-11-03) is `(window, most)`: in the first `window` rows
+    of the list as SHOWN no card is in more than `most` (`CARD_CAP`,
+    `cap_cards`); a row that would break it moves to just below them.
+
+    `usage_weight` (2026-11-03): each row carries `vsPlay`, its rate against
+    the families they play weighted by their real share of GAMES
+    (`game_shares`), and gains `usage_weight` x (vsPlay - figure) points in
+    the choosing (`USAGE_WEIGHT`). The printed figure is unchanged.
+
     `first` is a row (matched by `key`) that leads whatever its figure — the
     #1 a squad assigned this teammate. Each row comes back with `vs` (its rate
     against each family) and `answers` (the families it is the list's best
@@ -1876,6 +2020,7 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
     one row always does when anything was scored at all.
     """
     pool = []
+    usage = game_shares(plays)
     each_plays = plays
     if each_floor is not None:
         # Only the families some row could be rated against are required.
@@ -1889,6 +2034,11 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         # HOW MANY TOP PLAYERS USE IT (6.1, `useBonus`, stamped by the caller):
         # points in the choosing only, never in the figure.
         c["_v"] += float(c.get("useBonus") or 0.0)
+        vp = vs_weighted(c["vs"], usage) if usage else None
+        if vp is not None:
+            c["vsPlay"] = round(vp, 1)
+            if usage_weight:
+                c["_v"] += usage_weight * (vp - _rate(c))
         c["worst"] = worst_case(c["vs"], plays)
         if c["worst"] is not None and c["worst"]["rate"] < WORST_FLOOR:
             c["_v"] -= HOLE_COST
@@ -2078,6 +2228,8 @@ def counters(rows, plays, *, limit=MAX_RECOMMENDATIONS,
         rest.sort(key=lambda r: (-(r["eachWorst"]["rate"] if r["eachWorst"]["rate"] is not None else -1.0),
                                  -_rate(r), r["key"]))
         out = [c for c in out if c["_each"]] + rest
+    if card_cap:
+        out = cap_cards(out, *card_cap, keep=head[0] if head else None)
     for c in out:
         del c["_v"]
         if c.pop("_round"):
@@ -2611,7 +2763,7 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                   min_list: int = MIN_LIST, per_wincon: int = PER_ARCHETYPE,
                   each_floor: float | None = None, each_min: int = 0,
                   plays=None, each_near: float | None = None,
-                  each_per_family: int | None = None):
+                  each_per_family: int | None = None, usage_weight: float = 0.0):
     """Every teammate's list against ONE opponent, each built out of that
     teammate (5.0; see the section note).
 
@@ -2746,7 +2898,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
         picked = counters(mine, plays, limit=limit, score_key="personalScore", specific=False,
                                   by_wincon=True, per_family=per_wincon, floor_only=True,
                                   adjust=_familiar_first, each_floor=each_floor,
-                                  each_per_family=each_per_family)
+                                  each_per_family=each_per_family,
+                                  usage_weight=usage_weight)
         want = min(min_list, limit)
         if len(picked) < want:
             # Topped up, never replaced: what the list holds is kept.
@@ -2758,7 +2911,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                                   by_wincon=True, per_family=per_wincon, floor_only=True,
                                   adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
                                   + _familiar_first(c), each_floor=each_floor,
-                                  each_per_family=each_per_family)
+                                  each_per_family=each_per_family,
+                                  usage_weight=usage_weight)
                 if len(picked) >= want:
                     break
         if each_floor is not None and len(picked) < min(each_min, limit):
@@ -2773,7 +2927,8 @@ def personal_plan(players, pool, threats, *, limit: int = MAX_RECOMMENDATIONS,
                               adjust=lambda c, _k=keep: (1000.0 if c["key"] in _k else 0.0)
                               + _familiar_first(c),
                               each_floor=each_floor, each_min=each_min, each_near=each_near,
-                              each_per_family=each_per_family)
+                              each_per_family=each_per_family,
+                                  usage_weight=usage_weight)
         for r in picked:
             if not r.get("owner") and r["key"] not in {h["key"] for h in held[tag]}:
                 taken[r["key"]] = taken.get(r["key"], 0) + 1

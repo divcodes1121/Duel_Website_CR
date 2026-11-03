@@ -1564,6 +1564,67 @@ columns at 390px.
   `localStorage` under `royal-duels-theme`, so the run pins it to dark first and
   then measures both.
 
+## 10a. Ten of their decks, and suggestions that vary (2026-11-03)
+
+Asked: the opponent's decks should show what they play in ladder and friendly
+battles with how often, 7-10 decks; and the suggestions "are very focused on
+specific decks" - show variations, weigh what the opponent plays most, keep the
+per-win-condition brains.
+
+**Measured first** (live scouting report of the four players in Players.txt,
+30 days): the opponent read already took Ranked, trophy-road Ladder, Friendly
+and Friendly Duel games (since 7.0), but only six decks were shown, covering
+15-69% of a player's games, with no split by mode. "Likely to bring" is the
+flattened chance (4.0, `TEMPER` 0.5): a player on Hog Rider in 469 of 612 games
+(77%) read 26%. Every board led with Giant / Bridge Spam x2-3 / Three Musketeers
+/ Royal Hogs / Golem in a similar order; Barbarian Barrel was in 10-15 of ~30
+suggested decks; against the 77% Hog player the best Hog counter sat at #6.
+
+**What changed:**
+
+- **They play: ten decks** (`OPPONENT_DECKS` 6 -> 10), each with its games by
+  kind (`player_decks.played` -> `kinds`, `mode_kind`; rows `modes`), drawn as
+  "58 ranked · 9 ladder · 12 friendly · 3 duel" (`utils/teamModes.ts`).
+- **Likely to bring keeps the chance and adds the history**: each bar carries
+  `gameShare`, "77% of games" (`_spread_of`, `plays[].gameShare`).
+- **At most two builds of one win condition on the list**
+  (`SCOUT_EACH_PER_FAMILY` 2, was 3); the rest are in the win condition's
+  top-5 dropdown, unchanged.
+- **No card in more than 3 of the top ten as shown** (`team_scout.CARD_CAP`,
+  `cap_cards`): a row that would break it moves just below the ten.
+- **Usage weight in the choosing**: each row carries `vsPlay` (its rate weighted
+  by their real share of games) and gains `USAGE_WEIGHT` 1.0 x (vsPlay - figure)
+  points in the choosing. The printed figure and every 7.0 rule are unchanged.
+- **"Against what they play most"**: a block above the list with the best decks
+  against their one or two most-played families by games (`main_counters`,
+  `mainCounters`), each still beating every family they play.
+
+**Replayed before choosing** (`brain-evidence/` not kept; lab in `/tmp/ts8lab`
+on the VPS): 160 opponents with a friendly duel in 28 Oct - 3 Nov, read with
+only the 30 days to 27 Oct and the pool of that window, picked with a card model
+fitted only before 28 Oct, judged by a card model fitted only on games from 28
+Oct on, against what each really played 28 Oct - 3 Nov (ranked + friendly, by
+games):
+
+| | before | 1 a win con | **2 a win con (shipped)** | 2, no card cap |
+|---|---|---|---|---|
+| #1 | 61.1 | 61.4 | 61.2 | 61.2 |
+| top three | 60.2 | 59.4 | 59.8 | 59.8 |
+| top ten | 58.1 | 56.0 | 56.8 | 57.7 |
+| win conditions in a top ten | 6.2 | 10 | 8.2 | 7.2 |
+| most copies of one card in a top ten | 5.8 | 3.3 | 3.3 | 5.5 |
+| most repeated list, % of opponents | 35.6 | 29.4 | 26.9 | 32.5 |
+| distinct lists over 160 boards | 496 | 568 | 582 | 536 |
+
+Usage weight 1.0: #1 against their most-played deck +0.5 [+0.03, +0.93] (0.5:
++0.2). The cost of the variety is told, not hidden: top three -0.4, top ten
+-1.3. **The "against what they play most" block judged 60.4 against their main
+deck, level with the list's own #1 (61.3 before, 61.5 after)** - it shows the
+answer to their main deck, it is not a stronger one.
+
+Tests: `test_team_scout` 252 -> 271 (`property_usage_and_variety`),
+`tests/teamModes.test.ts` (new). Release note `2026-11-03-team-scout-variety`.
+
 ## 11. Still owed
 
 - **`PER_PLAYER_TOP_N` is 7 now (§4c)**, at the account holder's request. The

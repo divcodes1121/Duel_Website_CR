@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Team Analysis: ten of their decks, varied suggestions** | **BUILT 2026-11-03, NOT YET DEPLOYED.** Opponent side: 10 decks with ranked / ladder / friendly / duel games each, and their real share of games beside "likely to bring". Suggestions: at most 2 builds per win condition, no card in more than 3 of the top ten, a usage weight toward decks that beat what they play most, and an "Against what they play most" block. Replayed on 160 opponents out of time: win conditions in a top ten 6.2 -> 8.2, most repeated list 35.6% -> 26.9%, card max 5.8 -> 3.3, for top three -0.4 and top ten -1.3. See [Ten of their decks](#ten-of-their-decks-and-suggestions-that-vary-2026-11-03) |
 | **Evolution Giant and Evolution Mirror** | **LIVE 2026-11-03; server half first** (`push-card-data.py` sent `cardRoles.json`, `cardBalance.json` and `cardMeta.json` and restarted royalweb; the live `deck` route then drew Giant and Mirror as evolutions with no marks). Season 89 forms: one flag each in `cardMeta.json` and one file of art each (45 evolutions, 18 heroes, 123 cards). Giant becomes the fifth card with both forms, so the Wild slot asks which one; Mirror is evolution-only. Card manual entries #042 and #099 and Appendix C updated from Supercell's 27 October season post. 8 no-evidence Giant decks re-seat. 17/17 browser checks locally. See [November 2026: Evolution Giant and Evolution Mirror](#november-2026-evolution-giant-and-evolution-mirror) |
 | **Two tabs no longer overwrite each other's decks** | **2026-10-23.** Reported: Deck's Home decks saved while two Deckkies tabs were open (copying decks from one into the other) were all gone after a refresh; and "when one refreshes, another goes back to the old one". Each tab held the decks in memory and wrote ALL of them on every change, so the tab opened earlier wrote its older list over the new one, in this browser and in the account. Now a tab takes over what another tab stores the moment it is stored (the browser's `storage` event), keeping only its own mode, open folder and selection; and the account keeps a 30-day copy when Deck's Home or a Counter Palette folder LOSES decks (before, only a shrinking saved library did, which is why the lost decks had no copy). Reproduced in Chrome on the old code (20 added, 0 after refresh) and fixed on the new (20 kept, 9/9). **1,831 vitest.** See [Two tabs open at once](#two-tabs-open-at-once-2026-10-23) |
 | **No grey: black + violet (dark) and violet mist (light)** | **LIVE 2026-10-22 as `e8de10a` (dark) and `17372d8` (light), client only.** Reported: "the whole website has a grey background on every tab"; light "looks transparent". Researched (Linear, Vercel, Stripe, tinted neutrals), rendered options in `testing/palette/` and `testing/light/`, chosen from the screenshots. Dark: panels at the page's black with a violet hint, violet hairlines. Light: lavender page, SOLID near-white cards (were 85% see-through), violet hairlines and shadows. Soft fills in both mix from `--wash-ink` (lilac / violet) instead of white or black. A grey scan of every visible element finds nothing on twelve screens in either theme (the silver #2 medal excepted on dark). See [Light mode is violet mist](#light-mode-is-violet-mist-2026-10-22) and [Dark mode is black + violet](#dark-mode-is-black--violet-no-grey-2026-10-22) |
@@ -13539,6 +13540,67 @@ the `.js` and the `.css`) and then never committed. See
 import is eager until that is fixed, and the reason is written at the import.
 
 ---
+
+## Ten of their decks, and suggestions that vary (2026-11-03)
+
+Asked: the opponent's decks should show what they play in ladder and friendly
+battles with how often, 7-10 decks; and the suggestions "are very focused on
+specific decks" - show variations, weigh what the opponent plays most, keep the
+per-win-condition brains.
+
+**Measured first** (live scouting report of the four players in Players.txt,
+30 days): the opponent read already took Ranked, trophy-road Ladder, Friendly
+and Friendly Duel games (since 7.0), but only six decks were shown, covering
+15-69% of a player's games, with no split by mode. "Likely to bring" is the
+flattened chance (4.0, `TEMPER` 0.5): a player on Hog Rider in 469 of 612 games
+(77%) read 26%. Every board led with Giant / Bridge Spam x2-3 / Three Musketeers
+/ Royal Hogs / Golem in a similar order; Barbarian Barrel was in 10-15 of ~30
+suggested decks; against the 77% Hog player the best Hog counter sat at #6.
+
+**What changed:**
+
+- **They play: ten decks** (`OPPONENT_DECKS` 6 -> 10), each with its games by
+  kind (`player_decks.played` -> `kinds`, `mode_kind`; rows `modes`), drawn as
+  "58 ranked · 9 ladder · 12 friendly · 3 duel" (`utils/teamModes.ts`).
+- **Likely to bring keeps the chance and adds the history**: each bar carries
+  `gameShare`, "77% of games" (`_spread_of`, `plays[].gameShare`).
+- **At most two builds of one win condition on the list**
+  (`SCOUT_EACH_PER_FAMILY` 2, was 3); the rest are in the win condition's
+  top-5 dropdown, unchanged.
+- **No card in more than 3 of the top ten as shown** (`team_scout.CARD_CAP`,
+  `cap_cards`): a row that would break it moves just below the ten.
+- **Usage weight in the choosing**: each row carries `vsPlay` (its rate weighted
+  by their real share of games) and gains `USAGE_WEIGHT` 1.0 x (vsPlay - figure)
+  points in the choosing. The printed figure and every 7.0 rule are unchanged.
+- **"Against what they play most"**: a block above the list with the best decks
+  against their one or two most-played families by games (`main_counters`,
+  `mainCounters`), each still beating every family they play.
+
+**Replayed before choosing** (`brain-evidence/` not kept; lab in `/tmp/ts8lab`
+on the VPS): 160 opponents with a friendly duel in 28 Oct - 3 Nov, read with
+only the 30 days to 27 Oct and the pool of that window, picked with a card model
+fitted only before 28 Oct, judged by a card model fitted only on games from 28
+Oct on, against what each really played 28 Oct - 3 Nov (ranked + friendly, by
+games):
+
+| | before | 1 a win con | **2 a win con (shipped)** | 2, no card cap |
+|---|---|---|---|---|
+| #1 | 61.1 | 61.4 | 61.2 | 61.2 |
+| top three | 60.2 | 59.4 | 59.8 | 59.8 |
+| top ten | 58.1 | 56.0 | 56.8 | 57.7 |
+| win conditions in a top ten | 6.2 | 10 | 8.2 | 7.2 |
+| most copies of one card in a top ten | 5.8 | 3.3 | 3.3 | 5.5 |
+| most repeated list, % of opponents | 35.6 | 29.4 | 26.9 | 32.5 |
+| distinct lists over 160 boards | 496 | 568 | 582 | 536 |
+
+Usage weight 1.0: #1 against their most-played deck +0.5 [+0.03, +0.93] (0.5:
++0.2). The cost of the variety is told, not hidden: top three -0.4, top ten
+-1.3. **The "against what they play most" block judged 60.4 against their main
+deck, level with the list's own #1 (61.3 before, 61.5 after)** - it shows the
+answer to their main deck, it is not a stronger one.
+
+Tests: `test_team_scout` 252 -> 271 (`property_usage_and_variety`),
+`tests/teamModes.test.ts` (new). Release note `2026-11-03-team-scout-variety`.
 
 ## A brain for every win condition, and its top five (team-scout-7.2, 2026-10-27)
 

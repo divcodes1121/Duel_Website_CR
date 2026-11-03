@@ -872,7 +872,7 @@
 
 .spreadRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 5rem 2.5rem;
+  grid-template-columns: minmax(0, 1fr) 5rem 2.5rem auto;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.78rem;
@@ -897,6 +897,48 @@
 .spreadPct {
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+/* Their real share of games beside the chance (2026-11-03). */
+.spreadGames {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+/* An opponent deck's games by kind, under its name. */
+.theirModes {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* "Against what they play most" (2026-11-03): a short list above the main
+   one, set apart by a hairline in the side's own hue. */
+.mainBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.6rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--hue-blue) 45%, transparent);
+  background: var(--surface-nested);
+}
+
+.mainTitle {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.mainFor {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── A recommendation ────────────────────────────────────────────────────── */

@@ -3,6 +3,7 @@ import type {
   TeamBrain,
   TeamBrainDeck,
   TeamFolder,
+  TeamMainCounters,
   TeamMode,
   TeamOverall,
   TeamPlayerOptions,
@@ -20,6 +21,7 @@ import { CARDS_BY_KEY } from '../../../data/cards';
 import styles from './TeamAnalysis.module.css';
 import { Threats } from './Threats';
 import { SuggestHeading } from './SuggestHeading';
+import { gamesLabel, modeSplit } from '../../../utils/teamModes';
 
 /**
  * The folders under a team analysis: a gallery of opponents, and the opened
@@ -391,9 +393,12 @@ function BrainDeckRow({ d, rank, labels, current }: {
   );
 }
 
-function Recommendation({ rec, rank, labels, brain }: {
+function Recommendation({ rec, rank, labels, brain, figure }: {
   rec: TeamRecommendation;
   rank?: number;
+  /** 'main' prints `vsMain` — the rate against what they play most — as the
+   *  headline (the "Against what they play most" block, 2026-11-03). */
+  figure?: 'main';
   /** This deck's win-condition brain (7.2): its top decks, in a dropdown. */
   brain?: TeamBrain;
   /** Archetype key -> display name, in the order the opponent is likely to
@@ -459,7 +464,9 @@ function Recommendation({ rec, rank, labels, brain }: {
           <span
             className={styles.recRate}
             title={[
-              'Expected win rate against the decks this opponent is likely to bring, weighted by how likely each is.',
+              figure === 'main'
+                ? `Win rate against what they play most, weighted by how often they play each. Against everything they play: ${pct(rec.expectedWinRate)}.`
+                : 'Expected win rate against the decks this opponent is likely to bring, weighted by how likely each is.',
               /* How much the list was played in the History window picked
                  (2026-10-11). A tooltip: every suggested row was played in it. */
               recentTitle(rec.recent),
@@ -474,7 +481,7 @@ function Recommendation({ rec, rank, labels, brain }: {
               .join(' · ')}
             data-trend={rec.recent?.trend}
           >
-            {pct(rec.expectedWinRate)}
+            {figure === 'main' && rec.vsMain !== undefined ? pct(rec.vsMain) : pct(rec.expectedWinRate)}
           </span>
           <span className={styles.recSub}>
             {rec.comfort ? (
@@ -552,6 +559,32 @@ function Recommendation({ rec, rank, labels, brain }: {
           barely vary, so the line said the same thing on every row. The
           fields stay on the payload; the PDF still prints coverage. */}
     </li>
+  );
+}
+
+/**
+ * AGAINST WHAT THEY PLAY MOST (2026-11-03): the decks that beat this
+ * opponent's one or two most-played deck types by their real share of games,
+ * each still beating every type they play. Asked for: "usage countering opp
+ * deck frequency". The figure is the rate against those main types.
+ */
+function MainCounters({ block, labels }: {
+  block?: TeamMainCounters | null;
+  labels?: [string, string][];
+}) {
+  if (!block || !block.decks.length) return null;
+  return (
+    <section className={styles.mainBlock} data-main-counters>
+      <h5 className={styles.mainTitle}>Against what they play most</h5>
+      <p className={styles.mainFor}>
+        {block.mains.map((m) => `${m.name} ${gamesLabel(100 * m.gameShare)}`).join(' · ')}
+      </p>
+      <ol className={styles.mateDecks}>
+        {block.decks.map((r, i) => (
+          <Recommendation key={r.key} rec={r} rank={i + 1} labels={labels} figure="main" />
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -775,6 +808,11 @@ export function OpenFolder({
                         {d.useRate.toFixed(0)}% use · {pct(d.winRate)} · {d.matches} games
                       </span>
                     </div>
+                    {modeSplit(d.modes) && (
+                      <span className={styles.theirModes} data-modes>
+                        {modeSplit(d.modes)}
+                      </span>
+                    )}
                     <Strip cards={d.cards} art={d.art} inferred={d.artInferred} name={d.name} />
                   </li>
                 ))}
@@ -790,7 +828,21 @@ export function OpenFolder({
                     <span className={styles.spreadBar} aria-hidden="true">
                       <span style={{ width: `${s.share}%` }} />
                     </span>
-                    <span className={styles.spreadPct}>{s.share.toFixed(0)}%</span>
+                    <span
+                      className={styles.spreadPct}
+                      title="The chance they bring it, which the figures on the right are weighted by."
+                    >
+                      {s.share.toFixed(0)}%
+                    </span>
+                    {s.gameShare !== undefined && (
+                      <span
+                        className={styles.spreadGames}
+                        title="Their real share of games in the window."
+                        data-game-share
+                      >
+                        {gamesLabel(s.gameShare)}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -814,6 +866,7 @@ export function OpenFolder({
               <section className={styles.boardSide} data-side="blue">
                 <SuggestHeading />
                 <BrainsLine folder={folder} />
+                <MainCounters block={folder.mainCounters} labels={labels} />
                 <ol className={styles.mateDecks}>
                   {folder.recommended.map((r, i) => (
                     <Recommendation
@@ -833,6 +886,7 @@ export function OpenFolder({
               <section className={styles.boardSide} data-side="blue">
                 <SuggestHeading />
                 <BrainsLine folder={folder} />
+                <MainCounters block={folder.mainCounters} labels={labels} />
                 <SquadCover rows={folder.squadCover ?? []} />
                 <ul className={styles.mates}>
                   {folder.perPlayer.map((row) => (

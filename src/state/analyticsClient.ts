@@ -44,6 +44,10 @@ export interface ApiDeck {
   /** True when `art` was inferred from slot position rather than observed —
    *  `player_evo` only covers battles from 2026-08-05 onward. */
   artInferred?: boolean;
+  /** Team Analysis' opponent decks only (2026-11-03): the deck's games by kind
+   *  — ranked (Path of Legends), ladder (trophy road), friendly, duel (native
+   *  friendly duel) and other. Absent from an older server. */
+  modes?: Partial<Record<'ranked' | 'ladder' | 'friendly' | 'duel' | 'other', number>>;
 }
 
 export interface ApiTrends {
@@ -763,6 +767,13 @@ export interface PlayerMatchup {
   deckSeen?: number;
 }
 
+/** "Against what they play most" (2026-11-03). */
+export interface TeamMainCounters {
+  /** Their most-played families, with their share of games (0..1). */
+  mains: { family: string; name: string; gameShare: number }[];
+  decks: TeamRecommendation[];
+}
+
 /** One FAMILY a player plays: an archetype, or — for the decks the collector
  *  files under one "other" key — the win condition they actually run. */
 export interface PlaysFamily {
@@ -777,6 +788,8 @@ export interface PlaysFamily {
   share: number;
   /** Share of their games in the window, recency-weighted, 0..1 (brain 4.0). */
   played?: number;
+  /** Plain share of their games in the window, 0..1 (2026-11-03). */
+  gameShare?: number;
   games: number;
   /** How many distinct lists of it they fielded. */
   decks: number;
@@ -2537,6 +2550,9 @@ export interface TeamSpreadRow {
   weight: number;
   /** Percentage of the decks considered — the weight, as it is displayed. */
   share: number;
+  /** Their real share of GAMES in the window, percent (2026-11-03). `share`
+   *  is the flattened chance; this is the history. Absent from an older server. */
+  gameShare?: number;
 }
 
 /**
@@ -2795,6 +2811,12 @@ export interface TeamRecommendation {
   /** Its lowest rate over those archetypes, and which (`rate` null = one it
    *  could not be rated against). */
   eachWorst?: { family: string | null; rate: number | null };
+  /** Its rate against what they play, weighted by their real share of GAMES
+   *  (2026-11-03) rather than the flattened chance the figure uses. */
+  vsPlay?: number;
+  /** "Against what they play most" rows only: its rate against their one or
+   *  two most-played families, by their share of games. */
+  vsMain?: number;
   /** Cards of this deck the game changed in the last month. */
   balance?: BalanceMark[];
   /** How much this list was played in the day window asked for, and which way
@@ -3011,6 +3033,10 @@ export interface TeamFolder {
    *  opponent, and its top decks for the dropdown. Absent from an older
    *  server or a saved board made before it. */
   brains?: TeamBrainsReport | null;
+  /** AGAINST WHAT THEY PLAY MOST (2026-11-03): the best decks against their
+   *  one or two most-played families by real games, each still beating every
+   *  archetype they play. Null when there is none; absent from an older server. */
+  mainCounters?: TeamMainCounters | null;
   /** The duel brain's read of this opponent. Absent from an older server. */
   duel?: TeamDuelRead;
   considered: number;

@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-11-03-team-scout-variety',
+    date: '2026-11-03',
+    kind: 'improved',
+    title: 'Team Analysis: ten of their decks, and more varied suggestions',
+    body: [
+      'Each opponent now shows their ten most-played decks, each split into ranked, ladder, friendly and duel games, and every deck type they play shows its real share of their games beside how likely they are to bring it.',
+      'Suggestions show at most two builds of a win condition and no card in more than three of the top ten, lean toward decks that beat what the opponent plays most, and a new block lists the best decks against their most-played decks.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+    needs: 'trial',
+  },
+  {
     id: '2026-11-03-giant-mirror-evolutions',
     date: '2026-11-03',
     kind: 'new',
