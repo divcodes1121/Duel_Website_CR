@@ -19,7 +19,7 @@ ladder and the duels together, with every weight fitted on a temporal duel
 holdout (§4i, `fdce37e`).
 
 `server/team_scout.py` + `server/test_team_scout.py` (**160** checks, no
-database), wired through `server/team_analysis.py`. Brain version
+database — **272** as of 2026-11-03), wired through `server/team_analysis.py`. Brain version
 **`team-scout-2.1`** (was 2.0 until 2026-09-25), published on every report.
 
 ---
@@ -1591,7 +1591,10 @@ suggested decks; against the 77% Hog player the best Hog counter sat at #6.
   (`SCOUT_EACH_PER_FAMILY` 2, was 3); the rest are in the win condition's
   top-5 dropdown, unchanged.
 - **No card in more than 3 of the top ten as shown** (`team_scout.CARD_CAP`,
-  `cap_cards`): a row that would break it moves just below the ten.
+  `cap_cards`): a row that would break it moves just below the ten. When the rows
+  cannot fill a top ten under 3, the tightest cap that can is used (live: 4
+  for two of the four players checked, where the first deploy's fallback
+  had let one card into five).
 - **Usage weight in the choosing**: each row carries `vsPlay` (its rate weighted
   by their real share of games) and gains `USAGE_WEIGHT` 1.0 x (vsPlay - figure)
   points in the choosing. The printed figure and every 7.0 rule are unchanged.

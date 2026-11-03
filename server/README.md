@@ -878,7 +878,7 @@ Princess deck and rendered it as a different deck. It also outranks `marks`:
 pooled marks are what everyone's copy of those eight cards was fielded as, and
 they were reordering a Battle Ram / Wizard / Elite Barbarians link into Battle
 Ram / Elite Barbarians / Wizard. `wild=` overrides slot 3, the only one a link
-cannot settle — knight, valkyrie, musketeer and wizard have both forms — and it
+cannot settle — knight, valkyrie, musketeer, wizard and (since 2026-11-03) giant have both forms — and it
 is applied on every path, not only this one.
 
 **Pass it the observed marks whenever you have them — they decide.** The second
@@ -2373,6 +2373,43 @@ every archetype that beats the deck rather than the first five — a deck with
 twelve real counters was reporting five while the style breakdown below it
 counted all twelve.
 
+
+## Ten of their decks, and lists that vary (`OPPONENT_DECKS`, `cap_cards`, `USAGE_WEIGHT`, `main_counters`, 2026-11-03)
+
+Same brain version (7.2); what changed is what the folder shows and how the
+list is chosen. README "Ten of their decks, and suggestions that vary" and
+DECKKIES_TEAM_SCOUT §10a hold the measurements.
+
+- `player_decks.played` returns `kinds` — `{deck key: {kind: games}}` over
+  `MODE_KINDS` (`ranked` = `Ranked1v1_*`, `ladder` = trophy road, `friendly`,
+  `duel` = native friendly duel from the duel index, `other`), by `mode_kind`.
+  `team_analysis._own_decks` puts it on each row as `modes`.
+- `OPPONENT_DECKS` 6 -> 10 (`theirDecks`).
+- `_spread_of` rows and folder `plays` carry `gameShare` (their plain share
+  of games; `share` stays the flattened chance) — `_game_share`.
+- `SCOUT_EACH_PER_FAMILY` 2 (was `team_scout.EACH_PER_FAMILY` 3) in the
+  scouting list, a match plan's squad list and `personal_plan`.
+- `team_scout.counters(card_cap=, usage_weight=)`: `cap_cards` reorders the
+  list AS SHOWN so no card is in more than `CARD_CAP[1]` (3) of the first
+  `CARD_CAP[0]` (10), stepping the cap up when the rows cannot fill the top
+  under it (a fill pass would otherwise bring capped rows straight back, and
+  the first deploy's fallback switched the cap off: Zap in five of ten).
+  Every row carries `vsPlay` (rate weighted by `game_shares`) and gains
+  `USAGE_WEIGHT` (1.0) x (vsPlay - figure) in the choosing only.
+- `team_scout.main_counters` -> folder `mainCounters {mains, decks}`: best
+  `vsMain` against their `MAIN_FAMILIES` (2) most-played families at
+  `MAIN_MIN_SHARE` (10%) of games, each still clearing 7.0's every-family
+  floor, one per win condition. `team_analysis._main_view` names and
+  dresses it. `vsPlay` / `vsMain` are in `_CHOSEN_KEYS` (without them the
+  dressed rows dropped the figure — seen on the first deploy).
+- Replay switches: `team_analysis.LIST_CARD_CAP` (False = off) and
+  `LIST_USAGE_WEIGHT`; None = the brain's constants.
+
+Replay lab (not kept in the repo): `/tmp/ts8lab` on the VPS — a card model
+fitted with ladder pairs LAST seen and duel games before 28 Oct picks, one
+fitted with pairs FIRST seen and duel games from 28 Oct on judges.
+`card_matchup_train.py` itself only cuts duels (`--before`); the lab wraps
+its ladder query.
 
 ## A brain for every win condition (`win_condition_brains`, `judged_plays`, 2026-10-27, brain 7.2)
 

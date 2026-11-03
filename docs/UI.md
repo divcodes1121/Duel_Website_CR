@@ -2258,6 +2258,24 @@ in `utils/bringAgainst.ts` (type imports only), `tests/bringAgainst.test.ts`.
 - An older server sends no `bring`; the block then draws the old list, so a
   deploy never leaves it empty.
 
+## Team Analysis: their ten decks, % of games, and "Against what they play most" (2026-11-03)
+
+- **They play** lists ten decks (was six). Under each deck's name, one muted
+  line of its games by kind, `58 ranked · 9 ladder · 12 friendly · 3 duel`
+  (`utils/teamModes.ts` `modeSplit`, `data-modes`); kinds with no games are
+  left out, and an older server sends no line.
+- **Likely to bring** rows keep the chance (the bar and its percentage) and
+  add the history beside it, `77% of games` (`gamesLabel`,
+  `data-game-share`). Both carry a tooltip saying which is which; the chance
+  is what the figures on the right are weighted by.
+- **Against what they play most** (`MainCounters`, `data-main-counters`): a
+  bordered block between the brains line and the list (both modes), one
+  line naming their main deck types with their share of games, then up to
+  three ranked rows whose headline is `vsMain` (tooltip: the rate against
+  what they play most, and against everything they play). No dropdown on
+  these rows. Numbers and names only — the no-prose rule of this screen.
+- The PDF prints the same three things (`teamReport.ts`).
+
 ## Working on this
 
 ```bash
