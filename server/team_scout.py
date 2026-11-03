@@ -1864,29 +1864,35 @@ def cap_cards(rows, window, most, *, keep=None):
     """`rows` in the same order, except that in the first `window` no card is
     in more than `most` of them: a row that would put a card over the cap
     waits just below the first `window`, in its own order. `keep` (a row,
-    e.g. a squad's assigned #1) is never moved."""
-    head, waiting = [], []
-    used: dict[str, int] = {}
-    for r in rows:
+    e.g. a squad's assigned #1) is never moved.
+
+    WHEN THE CAP CANNOT FILL THE TOP, THE TIGHTEST ONE THAT CAN IS USED
+    (`most`, then `most` + 1, ...). Seen live on the first deploy: when Zap and
+    Heal Spirit were in most of an opponent's 27 listed decks, no ten of them
+    held each at three or fewer, and a fallback that simply refilled the top
+    in list order put Zap in five of the ten — the cap silently off.
+    """
+    order = {id(r): i for i, r in enumerate(rows)}
+    if len(rows) <= window:
+        return list(rows)
+    for cap in range(max(1, most), window + 1):
+        head, waiting = [], []
+        used: dict[str, int] = {}
+        for r in rows:
+            if len(head) >= window:
+                waiting.append(r)
+                continue
+            cards = r.get("cards") or []
+            if r is not keep and any(used.get(k, 0) >= cap for k in cards):
+                waiting.append(r)
+                continue
+            head.append(r)
+            for k in cards:
+                used[k] = used.get(k, 0) + 1
         if len(head) >= window:
-            waiting.append(r)
-            continue
-        cards = r.get("cards") or []
-        if r is not keep and any(used.get(k, 0) >= most for k in cards):
-            waiting.append(r)
-            continue
-        head.append(r)
-        for k in cards:
-            used[k] = used.get(k, 0) + 1
-    if len(head) < window and waiting:
-        # Not enough rows to fill the head under the cap: the earliest waiting
-        # ones fill it rather than leaving the top short, and the head is put
-        # back in the list's own order.
-        fill = waiting[:window - len(head)]
-        order = {id(r): i for i, r in enumerate(rows)}
-        head = sorted(head + fill, key=lambda r: order[id(r)])
-        waiting = waiting[len(fill):]
-    return head + waiting
+            head.sort(key=lambda r: order[id(r)])
+            return head + waiting
+    return list(rows)
 
 
 def main_counters(rows, plays, *, n=MAIN_COUNTERS, families=MAIN_FAMILIES,

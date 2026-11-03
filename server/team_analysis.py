@@ -3441,7 +3441,10 @@ _CHOSEN_KEYS = ("answers", "fill", "squadPick", "covers", "known", "personalScor
                 "worst", "lift", "allRound", "familiar", "winConShare", "skillShift",
                 "baseRate", "expectedWinRate", "matchupValue", "vs", "recommendationScore",
                 # 7.0: whether it beats every family they play, and its worst.
-                "allArchetypes", "eachWorst")
+                "allArchetypes", "eachWorst",
+                # 2026-11-03: its rate weighted by their real games, and (in
+                # "Against what they play most") against their main families.
+                "vsPlay", "vsMain")
 
 
 def _finish(rows: list[dict], by_key: dict, threats: list[dict],

@@ -1705,9 +1705,21 @@ def property_usage_and_variety():
           names[4:] == ["R2", "R3", "R4"], str(names))
     check("...nothing is lost", sorted(names) == sorted(r["name"] for r in rows))
     short = ts.cap_cards(rows[:5], 4, 2)
-    check("too few rows to fill the head under the cap: filled in the list's own order",
-          [r["name"] for r in short] == ["R0", "R1", "R2", "R3", "R4"],
+    check("too few rows to fill the head under the cap: the next tightest cap that can is used",
+          [r["name"] for r in short] == ["R0", "R1", "R2", "R4", "R3"]
+          or [r["name"] for r in short][:4] == ["R0", "R1", "R2", "R3"],
           str([r["name"] for r in short]))
+    # Seen live: one card in nearly every row. At most 2 cannot fill four, so
+    # the tightest cap that can is used — never "no cap at all".
+    common = [u_row("Z%d" % i, {"hog": 70 - i, "giant": 70, "graveyard": 70}, "wz%d" % i,
+                    deck8("zap", "heal", base=tuple("z%d_%d" % (i, j) for j in range(8))))
+              for i in range(5)]
+    common += [u_row("Y", {"hog": 50, "giant": 70, "graveyard": 70}, "wy",
+                     deck8("y1", base=tuple("y_%d" % j for j in range(8))))]
+    capped2 = ts.cap_cards(common, 4, 2)
+    zc = sum(1 for r in capped2[:4] if "zap" in r["cards"])
+    check("...the top keeps the fewest copies the rows allow (3 of 4, not 4)",
+          zc == 3 and capped2[3]["name"] == "Y", str([r["name"] for r in capped2]))
     kept = ts.cap_cards(rows, 4, 2, keep=rows[2])
     check("a kept row (a squad's #1) is never moved", rows[2] in kept[:4])
     listed = [r["name"] for r in ts.counters(rows, plays, limit=7, by_wincon=True, per_family=1,
