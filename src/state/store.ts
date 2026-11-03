@@ -171,7 +171,7 @@ interface BuilderState extends PersistedSlice {
   renameDeck: (owner: DeckOwner, deckIndex: number, name: string) => void;
   /**
    * Field a specific form in the Wild slot — for a card that has both
-   * (Knight, Valkyrie, Musketeer, Wizard). No-op otherwise.
+   * (Giant, Knight, Valkyrie, Musketeer, Wizard). No-op otherwise.
    */
   setWildVariant: (owner: DeckOwner, deckIndex: number, variant: WildVariant) => void;
   /** Crowns this deck won in the duel (clamped to 0..MAX_CROWNS). */

@@ -394,8 +394,8 @@ function DeckInput({
         ))}
 
       {/* SLOT 3 IS THE AMBIGUOUS ONE. The link gives the three special slots in
-          order, so slots 1 and 2 are decided — but four cards (knight,
-          valkyrie, musketeer, wizard) can be either an evolution or a hero, and
+          order, so slots 1 and 2 are decided — but five cards (giant,
+          knight, valkyrie, musketeer, wizard) can be either an evolution or a hero, and
           a link that puts one in the wild slot cannot say which. Nothing in the
           data can settle it, so the person who pasted the deck does. Same
           choice the builder offers on its own wild slot. */}

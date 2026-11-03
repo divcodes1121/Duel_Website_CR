@@ -2397,7 +2397,8 @@
         "giant-snowball",
         "the-log",
         "zap"
-      ]
+      ],
+      "verified": "2026-11-03"
     },
     "giant-skeleton": {
       "targets": [
@@ -4890,7 +4891,8 @@
         "expensive-targets",
         "no-good-target",
         "play-order-errors"
-      ]
+      ],
+      "verified": "2026-11-03"
     },
     "monk": {
       "targets": [

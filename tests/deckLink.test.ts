@@ -187,9 +187,19 @@ describe('october 2026 forms', () => {
     expect({ hero: c.canBeHero, evo: c.canEvolve }).toEqual({ hero: false, evo: true });
   });
 
-  it('the cards with BOTH forms are still exactly the four the Wild picker knows', () => {
+  it('the cards with BOTH forms are exactly the five the Wild picker knows', () => {
     const both = CARDS.filter((c) => c.canEvolve && c.canBeHero).map((c) => c.key).sort();
-    expect(both).toEqual(['knight', 'musketeer', 'valkyrie', 'wizard']);
+    expect(both).toEqual(['giant', 'knight', 'musketeer', 'valkyrie', 'wizard']);
+  });
+
+  /* 2026-11-03: Season 89 added Evolution Giant and Evolution Mirror. Giant
+     already had a hero, so it became the FIFTH card that owns both forms and
+     the Wild picker now offers it a choice; Mirror is evolution-only. */
+  it('Giant owns both forms now; Mirror can evolve and has no hero', () => {
+    const g = CARDS_BY_KEY.get('giant')!;
+    const m = CARDS_BY_KEY.get('mirror')!;
+    expect({ hero: g.canBeHero, evo: g.canEvolve }).toEqual({ hero: true, evo: true });
+    expect({ hero: m.canBeHero, evo: m.canEvolve }).toEqual({ hero: false, evo: true });
   });
 
   /* A flag without its file is a broken image on a live screen, and nothing

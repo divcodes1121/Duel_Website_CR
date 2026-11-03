@@ -74,8 +74,8 @@ const TABS: { id: Tab; label: string }[] = [
  * against a combined number would be a claim the data does not make.
  *
  * `CardArt` falls back to the base image if a file is missing, but nothing here
- * relies on that — the metadata and the files agree exactly, 43 evolutions and
- * 18 heroes as of 2026-10-06, and `tests/deckLink.test.ts` holds the two lists
+ * relies on that — the metadata and the files agree exactly, 45 evolutions and
+ * 18 heroes as of 2026-11-03, and `tests/deckLink.test.ts` holds the two lists
  * equal against `public/assets/` in both directions. */
 const TAB_ART: Partial<Record<Tab, ArtVariant>> = {
   evolutions: 'evolution',

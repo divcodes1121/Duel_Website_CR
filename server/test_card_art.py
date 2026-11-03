@@ -455,11 +455,12 @@ check("no evolution file is a copy of its base card", not same_evo, str(same_evo
 same_hero = [k for k, h in heroes.items() if cards.get(k) == h]
 check("no hero file is a copy of its base card", not same_hero, str(same_hero))
 
-# The four that have both. This is the pair most likely to be mixed up, because
-# a card with two special forms is the only place one wrong copy is invisible.
+# The five that have both (Giant joined on 2026-11-03 with its evolution). This
+# is the pair most likely to be mixed up, because a card with two special forms
+# is the only place one wrong copy is invisible.
 dual = sorted(set(evos) & set(heroes))
-check("exactly the four dual-form cards carry both",
-      dual == ["knight", "musketeer", "valkyrie", "wizard"], str(dual))
+check("exactly the five dual-form cards carry both",
+      dual == ["giant", "knight", "musketeer", "valkyrie", "wizard"], str(dual))
 check("and none of them uses one file for both forms",
       all(evos[k] != heroes[k] for k in dual),
       str([k for k in dual if evos[k] == heroes[k]]))

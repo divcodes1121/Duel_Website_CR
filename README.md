@@ -53,6 +53,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
+| **Evolution Giant and Evolution Mirror** | **LIVE 2026-11-03; server half first** (`push-card-data.py` sent `cardRoles.json`, `cardBalance.json` and `cardMeta.json` and restarted royalweb; the live `deck` route then drew Giant and Mirror as evolutions with no marks). Season 89 forms: one flag each in `cardMeta.json` and one file of art each (45 evolutions, 18 heroes, 123 cards). Giant becomes the fifth card with both forms, so the Wild slot asks which one; Mirror is evolution-only. Card manual entries #042 and #099 and Appendix C updated from Supercell's 27 October season post. 8 no-evidence Giant decks re-seat. 17/17 browser checks locally. See [November 2026: Evolution Giant and Evolution Mirror](#november-2026-evolution-giant-and-evolution-mirror) |
 | **Two tabs no longer overwrite each other's decks** | **2026-10-23.** Reported: Deck's Home decks saved while two Deckkies tabs were open (copying decks from one into the other) were all gone after a refresh; and "when one refreshes, another goes back to the old one". Each tab held the decks in memory and wrote ALL of them on every change, so the tab opened earlier wrote its older list over the new one, in this browser and in the account. Now a tab takes over what another tab stores the moment it is stored (the browser's `storage` event), keeping only its own mode, open folder and selection; and the account keeps a 30-day copy when Deck's Home or a Counter Palette folder LOSES decks (before, only a shrinking saved library did, which is why the lost decks had no copy). Reproduced in Chrome on the old code (20 added, 0 after refresh) and fixed on the new (20 kept, 9/9). **1,831 vitest.** See [Two tabs open at once](#two-tabs-open-at-once-2026-10-23) |
 | **No grey: black + violet (dark) and violet mist (light)** | **LIVE 2026-10-22 as `e8de10a` (dark) and `17372d8` (light), client only.** Reported: "the whole website has a grey background on every tab"; light "looks transparent". Researched (Linear, Vercel, Stripe, tinted neutrals), rendered options in `testing/palette/` and `testing/light/`, chosen from the screenshots. Dark: panels at the page's black with a violet hint, violet hairlines. Light: lavender page, SOLID near-white cards (were 85% see-through), violet hairlines and shadows. Soft fills in both mix from `--wash-ink` (lilac / violet) instead of white or black. A grey scan of every visible element finds nothing on twelve screens in either theme (the silver #2 medal excepted on dark). See [Light mode is violet mist](#light-mode-is-violet-mist-2026-10-22) and [Dark mode is black + violet](#dark-mode-is-black--violet-no-grey-2026-10-22) |
 | **Lists keep your place** | **LIVE 2026-10-22 as `ba4d907`, client only.** Reported: load a set from Royal Duels' Saved tab, go back, and it was on page 1 again. Every paged and "Show more" list now remembers where you were for the browser tab (a reload keeps it): the Saved page per mode and filter (with the set you loaded scrolled into view), the builder's tab and filter, Recent Battles' page per player and window, 2v2 Decks and All Duels' page and controls, and "Show more" on Decks, Cards and Deck Counter. See [Lists keep your place](#lists-keep-your-place-2026-10-22) |
@@ -2245,6 +2246,83 @@ on the live URL (the 24-check browser pass ran against a local dev server on
 the same code and the same two files), and no analytics screen was looked at
 with the new forms on it. A phone caches hard; the new art needs a hard refresh
 there.
+
+### November 2026: Evolution Giant and Evolution Mirror
+
+Two renders arrived on 2026-11-03 for Season 89 ("King vs. King", live 2
+November): **Evolution Giant** and **Evolution Mirror**. Neither is a new card.
+Each is one boolean in `src/data/cardMeta.json` and one file of art:
+
+| | flag | served art |
+|---|---|---|
+| Giant | `can_evolve: true` (already `can_be_hero`) | `public/assets/evolutions/giant.webp` (302x375) |
+| Mirror | `can_evolve: true` | `public/assets/evolutions/mirror.webp` (302x367) |
+
+**45 evolutions and 18 heroes over the same 123 cards.**
+
+**Giant is the fifth card that owns BOTH forms**, with Knight, Valkyrie,
+Musketeer and Wizard. Nothing in the code lists those cards: the Wild-slot form
+picker (`deckUtils`), `deckSeating.ts`, `duelImport.ts` and the server's
+`arrange_deck` all read the two flags, so Giant gained the Evolution/Hero picker
+with no code change. Two tests pinned the list at four and now say five
+(`tests/deckLink.test.ts`, `server/test_card_art.py`). Mirror is evolution-only.
+
+**The art.** Mirror arrived as a 1136x1384 transparent PNG with a wider glow
+margin than the existing evolutions; it was cropped so the card body sits where
+Evolution Knight's does (left 0.096, top 0.035, bottom 0.063 of the frame, body
+0.81 of the width) and built by `scripts/build-card-art.py`. Giant arrived at
+**150x180** — half the 302 px the site draws — and was trimmed to the same
+proportions and enlarged to 302 wide. It reads correctly at every size the site
+uses and is slightly soft at the largest (card inspect, deck picture); its frame
+has a raised tab behind the gem that the other evolutions do not. A sharper
+render can replace it by the same steps. Masters: `assets/Evolutions/giant.png`
+(145x180) and `mirror.png` (1076x1308).
+
+**Seating moved for decks nobody was seen playing.** `tests/fixtures/seating.json`
+was re-run through the server's `arrange_deck(cards, {})`: 8 of the 98 recorded
+decks change, all of them Giant decks, where Giant now takes an Evolution slot
+and a hero-only card (Mini P.E.K.K.A., Dark Prince, Bowler) the Hero slot. That is
+the rule every both-form card follows (hero-only cards fill the Hero slot first,
+both-form cards fill the Evolution slots in stored order). Decks with observed
+forms are unchanged. Two constructed decks were added, one per new form.
+
+**The card manual** (`All_Cards_stats.md`, gitignored): entries #042 Giant and
+#099 Mirror gained the dated balance note, the header fields, a section 23
+write-up, the "normal vs evo vs hero" section and the tag lines
+(`EVOLUTION:giant-evolution` / `rage-trail` / 1 cycle; `mirror-evolution` /
+`evolved-copy` / 2 cycles); Appendix C gained a `BALANCE_PATCH:2026-11-02`
+block with two `NEW` lines. What is published, from Supercell's season post of
+27 October 2026: the evolved Giant, once he has taken enough damage, punches
+faster and leaves a Rage trail that enrages troops following him, growing with
+each hit; the evolved Mirror copies the last card played in its evolved form,
+one level higher, even if that evolution is not slotted or owned, and on a card
+with no evolution it is a plain Mirror. **Not published, so not written as a
+number:** Giant's damage threshold, the Rage boost, the trail's size and
+duration. The cycle counts (Giant 1, Mirror 2) are RoyaleAPI's. Supercell's post
+lists no balance numbers this season, only six bug fixes, which were not
+recorded. `scripts/build-card-roles.py` rebuilt `cardRoles.json` and
+`cardBalance.json` (8 patches, latest 2026-11-02).
+
+**The server reads the same `cardMeta.json`** for everything it infers (see the
+October section above), so the server half has to be deployed too:
+`python scripts/push-card-data.py` sends the rebuilt roles and balance log, the
+changed `cardMeta.json` (which restarts royalweb) and a copy of the manual.
+
+**Deployed 2026-11-03, server first.** `push-card-data.py` sent the three files (the
+service confirmed 123 cards and a balance log to 2026-11-02), and the live
+`/api/analytics/deck?cards=giant,mini-pekka,mirror,...` answered `{giant: evolution,
+mini-pekka: hero, mirror: evolution}`. The VPS copy of `server/test_card_art.py` was an
+older version (no champion-seating checks) and was replaced, backup
+`*.bak-<stamp>-pregiantmirror`. Then the site was pushed.
+
+Verified locally: 17/17 in a browser (Mirror in the Evolution slot and Giant in
+the Wild slot draw their evolution art, the Wild picker offers Giant's two forms
+and Hero switches the art, the Evos filter lists 45 cards with both new tiles in
+evolution art, no failed art request, both themes); 1,850 vitest / 81 files;
+`test_suggested_seating` 49, `test_deck_tuner` 153, `test_card_art` 131,
+`test_card_balance` 54, `test_deck_harmony` 76, `test_counters` 116,
+`test_coach_choice` 79, `test_deck_packages` 56, `test_meta` 41, `test_duel_set`
+49. Release note `2026-11-03-giant-mirror-evolutions`.
 
 ### The Vercel storage warning was card art, not code
 

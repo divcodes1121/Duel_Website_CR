@@ -82,6 +82,18 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-11-03-giant-mirror-evolutions',
+    date: '2026-11-03',
+    kind: 'new',
+    title: 'Evolution Giant and Evolution Mirror are in the deck tools',
+    body: [
+      'Giant and Mirror can now go in the Evolution slot in Royal Duels, Deck’s Home and the Counter Palette, each drawn in its new art.',
+      'Giant already had a hero form, so in the Wild slot you now pick which one you are fielding, as with Knight, Valkyrie, Musketeer and Wizard.',
+    ],
+    href: '#/builder',
+    hrefLabel: 'Open Royal Duels',
+  },
+  {
     id: '2026-10-27-win-condition-dropdowns',
     date: '2026-10-27',
     kind: 'new',

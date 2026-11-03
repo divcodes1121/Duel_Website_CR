@@ -508,8 +508,8 @@ export interface ApiCardRow {
    *  `player_evo` only covers battles from 2026-08-05 onward. */
   evoRate: number;
   /** Share of its own play where it was fielded as a HERO. Counted separately
-   *  from `evoRate` — they are two different special forms, and four cards
-   *  (knight, valkyrie, musketeer, wizard) have both. Same coverage caveat. */
+   *  from `evoRate` — they are two different special forms, and five cards
+   *  (giant, knight, valkyrie, musketeer, wizard) have both. Same coverage caveat. */
   heroRate: number;
   /** Enough battles behind the win rate to be ranked on it. */
   tiered: boolean;

@@ -21,7 +21,7 @@ export interface Deck {
   slots: DeckSlot[];
   /**
    * Which form the Wild slot fields when its card has BOTH an Evolution and a
-   * Hero form (Knight, Valkyrie, Musketeer, Wizard) — the player toggles it
+   * Hero form (Giant, Knight, Valkyrie, Musketeer, Wizard) — the player toggles it
    * with the switch on the slot. Absent means the default, 'evolution'. Reset
    * whenever the Wild slot's card changes.
    */

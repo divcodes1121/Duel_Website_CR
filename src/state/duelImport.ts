@@ -101,7 +101,7 @@ function crownsOf(n: number | undefined): number | undefined {
  * draws the right frames on its own; nothing here re-derives the order.
  *
  * The one thing position cannot settle is the Wild slot when its card has both
- * forms (Knight, Valkyrie, Musketeer, Wizard) — the default is Evolution, so a
+ * forms (Giant, Knight, Valkyrie, Musketeer, Wizard) — the default is Evolution, so a
  * hero that was actually fielded has to be recorded.
  */
 function deckFromCards(
