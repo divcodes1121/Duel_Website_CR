@@ -58,6 +58,14 @@ const SORTS = [
 
 const PER_PAGE = [25, 50, 100] as const;
 const NO_CARDS: string[] = [];
+/** `20261108T102014.000Z` -> `8 Nov`. */
+function shortDay(stamp: string): string {
+  const m = /^(\d{4})(\d{2})(\d{2})/.exec(stamp);
+  if (!m) return stamp;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
 const isShortText = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 24;
 
 /* ONE DECK IS ONE LINE: a head carrying the label, the elixir and the two
@@ -143,6 +151,8 @@ export function DuoDecks() {
      rather than a round trip later. The server clamps a page past the end,
      so the answer's own page replaces it when it lands. */
   const [page, setPage] = useRemembered('duo:page', 1, isPage);
+  /* The win condition the board is narrowed to ('' = all of them). */
+  const [wc, setWc] = useRemembered<string>('duo:wc', '', (v): v is string => typeof v === 'string' && v.length <= 24);
   const listRef = useRef<HTMLDivElement>(null);
   /* Only the newest request may write. Clicking through pages faster than
      they arrive used to be impossible — the loader covered the pager — and
@@ -151,13 +161,13 @@ export function DuoDecks() {
   const seq = useRef(0);
 
   const load = useCallback(
-    async (p: number, cards: string[], s: string, n: number) => {
+    async (p: number, cards: string[], s: string, n: number, w: string) => {
       const id = ++seq.current;
       setPage(p);
       setLoading(true);
       setError(null);
       try {
-        const r = await fetchDuoPairs(p, n, cards, s);
+        const r = await fetchDuoPairs(p, n, cards, s, w);
         if (id !== seq.current) return;
         setReport(r);
         setPage(r.page);
@@ -173,7 +183,7 @@ export function DuoDecks() {
 
   useEffect(() => {
     // Opens where it was left (the remembered page, cards, sort and size).
-    void load(page, picked, sort, per);
+    void load(page, picked, sort, per, wc);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
@@ -185,12 +195,17 @@ export function DuoDecks() {
     /* A pick is a new question about 1.4M rows, so it goes back to page 1.
        Staying on page 900 of a board that now has four would clamp to the end
        and read as the filter having scrolled somewhere at random. */
-    void load(1, next, sort, per);
+    void load(1, next, sort, per, wc);
   }
 
   function clear() {
     setPicked([]);
-    void load(1, [], sort, per);
+    void load(1, [], sort, per, wc);
+  }
+
+  function pickWinCondition(key: string) {
+    setWc(key);
+    void load(1, picked, sort, per, key);
   }
 
   const summary = report?.summary;
@@ -201,15 +216,45 @@ export function DuoDecks() {
         <h1 className={styles.title}>2v2 Decks</h1>
         {exportButton}
         <p className={styles.lede}>
-          Unique teammate deck combinations — the two decks a pair of players
-          actually brought together, not one deck against another.
+          Clan friendly 2v2: the {report?.perWinCondition ?? 50} most-played
+          teammate deck pairs for each win condition, last{' '}
+          {report?.windowDays ?? 30} days.
         </p>
-        {summary && (
+        {summary?.built && (
           <span className={styles.population}>
-            Population: Top {summary.populationLimit.toLocaleString()} 2v2 players
+            {(summary.battles ?? 0).toLocaleString()} clan friendly battles
+            {summary.firstSeen && <> · since {shortDay(summary.firstSeen)}</>}
           </span>
         )}
       </header>
+
+      {/* ONE CHIP PER WIN CONDITION, each opening its own top-50 list. */}
+      {!!report?.winConditions?.length && (
+        <div className={styles.wcRow} role="group" aria-label="Win condition">
+          <button
+            type="button"
+            className={styles.wcChip}
+            aria-pressed={!report.winCondition}
+            onClick={() => pickWinCondition('')}
+          >
+            All
+          </button>
+          {report.winConditions.map((w) => (
+            <button
+              key={w.key}
+              type="button"
+              className={styles.wcChip}
+              aria-pressed={report.winCondition === w.key}
+              disabled={!w.pairs}
+              onClick={() => pickWinCondition(w.key)}
+            >
+              {w.card && <CardArt card={w.card} className={styles.wcArt} />}
+              <span>{w.label}</span>
+              <span className={styles.wcCount}>{w.pairs}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className={styles.controls}>
         {/* THE CONTROL META AND DUEL ZONE ALREADY USE, and it replaced a text
@@ -246,7 +291,7 @@ export function DuoDecks() {
           value={sort}
           onChange={(v) => {
             setSort(v);
-            void load(1, picked, v, per);
+            void load(1, picked, v, per, wc);
           }}
           options={SORTS.map((s) => ({ value: s.key, label: s.label, description: s.hint }))}
         />
@@ -259,7 +304,7 @@ export function DuoDecks() {
           onChange={(v) => {
             const n = Number(v);
             setPer(n);
-            void load(1, picked, sort, n);
+            void load(1, picked, sort, n, wc);
           }}
           options={PER_PAGE.map((n) => ({ value: String(n), label: `${n} pairs` }))}
         />
@@ -269,7 +314,8 @@ export function DuoDecks() {
 
       {summary && !summary.built && !error && (
         <p className={styles.empty}>
-          The 2v2 collection has not been built yet.
+          Collecting clan friendly 2v2 battles — the board fills as they are
+          played.
         </p>
       )}
 
@@ -285,7 +331,7 @@ export function DuoDecks() {
           rather than as using a control. */}
       {loading && !report && (
         <ReadingState k="duo-pairs" hue="green">
-          Reading the 2v2 partnerships…
+          Reading clan friendly 2v2 pairs…
         </ReadingState>
       )}
 
@@ -309,7 +355,9 @@ export function DuoDecks() {
               ))}
               {!report.pairs.length && (
                 <p className={styles.empty}>
-                  No partnership runs all of those cards in one deck.
+                  {report.cards?.length
+                    ? 'No pair runs all of those cards in one deck.'
+                    : 'No clan friendly 2v2 pairs here yet.'}
                 </p>
               )}
             </div>
@@ -324,7 +372,7 @@ export function DuoDecks() {
               totalPages={report.pages}
               page={Math.min(page, report.pages)}
               onPageChange={(p) => {
-                void load(p, picked, sort, per);
+                void load(p, picked, sort, per, wc);
                 revealListTop(listRef.current);
               }}
               label="2v2 pair pages"

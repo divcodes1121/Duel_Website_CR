@@ -538,13 +538,14 @@ export function duoPairsDoc(r: DuoReport): ReportDoc {
       { label: 'Sort', value: r.sort },
       { label: 'Page', value: `${int(r.page)} of ${int(r.pages)}` },
       ...(r.cards?.length ? [{ label: 'Cards', value: r.cards.map((k) => CARDS_BY_KEY.get(k)?.name ?? k).join(', ') }] : []),
+      ...(r.winCondition ? [{ label: 'Win condition', value: r.winConditions?.find((w) => w.key === r.winCondition)?.label ?? r.winCondition }] : []),
     ],
     blocks: [
       {
         kind: 'stats',
         tiles: [
           { label: 'Unique pairs', value: int(r.total), note: r.cards?.length ? 'matching the card filter' : 'teammate partnerships' },
-          { label: 'Battles folded', value: int(s.battlesFolded), note: 'real 2v2 battles' },
+          { label: 'Battles', value: int(s.battles ?? s.battlesFolded ?? 0), note: r.windowDays ? `clan friendly 2v2, last ${r.windowDays} days` : 'real 2v2 battles' },
           { label: 'On this page', value: int(r.pairs.length), note: `page ${r.page} of ${r.pages}` },
         ],
       },

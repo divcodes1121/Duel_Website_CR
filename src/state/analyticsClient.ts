@@ -3276,38 +3276,57 @@ export interface DuoReport {
   cards?: string[];
   /** The closed vocabulary of orderings the server will accept. */
   sorts: string[];
+  /** `friendly` = the clan friendly board (`server/duo_friendly.py`, asked
+   *  for 2026-11-08): the most-played pairs per win condition over a rolling
+   *  window. Absent on the old all-time ranked board. */
+  kind?: 'friendly';
+  /** The win condition this page is narrowed to, as the server accepted it
+   *  ('' = every win condition's top pairs together). */
+  winCondition?: string;
+  /** Every win condition with how many pairs its list holds, for the chips.
+   *  `card` is a card to draw on the chip (none for `other`). */
+  winConditions?: { key: string; label: string; pairs: number; card?: string | null }[];
+  /** Pairs kept per win condition (50). */
+  perWinCondition?: number;
+  /** The rolling window the board ranks over, in days (30). */
+  windowDays?: number;
   summary: {
     mode: string;
     uniquePairs: number;
-    occurrences: number;
-    battlesFolded: number;
+    occurrences?: number;
+    battlesFolded?: number;
+    /** Friendly board: distinct battles inside the window. */
+    battles?: number;
+    /** Friendly board: when recording started — the window is shorter than
+     *  `windowDays` until then. */
+    collectingSince?: string;
     firstSeen: string;
     lastSeen: string;
-    sourceModes: string[];
+    sourceModes?: string[];
     builtAt: string;
     /** NEVER BUILT is not the same as BUILT AND EMPTY. */
     built: boolean;
     /** Every 2v2 row still in `battles` — phase 1 deletes nothing. */
-    rows2v2: number;
+    rows2v2?: number;
     /** How many of those have a surviving raw payload, so their partnership
      *  could be recovered at all. */
-    reconstructable: number;
+    reconstructable?: number;
     /** ...and how many do not. Their second deck is gone for good and is NOT
      *  represented on this board. Reported, never fabricated. */
-    unreconstructable: number;
+    unreconstructable?: number;
     /** 1 while `battles` still holds 2v2. */
-    phase: number;
+    phase?: number;
     /** Every 2v2 participant ever seen — the lightweight tier, kept for all. */
-    participants: number;
+    participants?: number;
     /** ...and the bounded set whose expensive per-battle detail is retained.
      *  The board shows partnerships from the whole collection; this says which
      *  players it keeps a history for, so the page cannot be mistaken for a
      *  complete census of 2v2. */
-    population: number;
-    populationLimit: number;
+    population?: number;
+    populationLimit?: number;
     /** Distinct-battle count at the population boundary. "Top 1,000" says how
      *  many; this says how good you had to be. */
-    populationCut: number;
+    populationCut?: number;
   };
 }
 
@@ -3327,12 +3346,15 @@ export interface DuoReport {
  * everything.
  */
 export function fetchDuoPairs(
-  page = 1, per = 25, cards: readonly string[] = [], sort = 'played',
+  page = 1, per = 25, cards: readonly string[] = [], sort = 'played', winCondition = '',
 ): Promise<DuoReport> {
+  /* `kind=friendly`: the 2v2 screen shows CLAN FRIENDLY 2v2 only (asked for
+     2026-11-08). The old all-time board still answers without it. */
   const q = new URLSearchParams({
-    page: String(page), per: String(per), sort,
+    kind: 'friendly', page: String(page), per: String(per), sort,
   });
   if (cards.length) q.set('cards', cards.join(','));
+  if (winCondition) q.set('wc', winCondition);
   return get<DuoReport>(`/api/analytics/duo-pairs?${q.toString()}`);
 }
 

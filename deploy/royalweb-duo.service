@@ -37,6 +37,11 @@ ExecStart=/usr/bin/python3 -u duo_pairs.py --update --reconcile
 Environment=CLASH_DUO_RETENTION=on
 ExecStart=/usr/bin/python3 -u duo_retention.py --maintain --prune
 
+# THEN THE CLAN FRIENDLY BOARD (2026-11-08). The fold above has already
+# recorded this hour's clanMate2v2 sides into `df_side`; this drops sides older
+# than 30 days and rebuilds the 50 most-played pairs per win condition.
+ExecStart=/usr/bin/python3 -u duo_friendly.py --refresh
+
 # FAIL VISIBLY. A non-zero exit marks the unit failed, `systemctl list-timers`
 # and `systemctl --failed` both show it, and the JSON summary each command
 # prints lands in the log beside the failure. A job that swallowed its own

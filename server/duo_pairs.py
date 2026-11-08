@@ -68,6 +68,7 @@ import time
 
 import battle_modes as bm
 import clash_data as cd
+import duo_friendly as df
 import duel_combos as dx
 import recruit
 import tracking
@@ -676,6 +677,9 @@ def _stage(con, src, since: str | None) -> dict:
     # advance past it -- see the note where it is applied.
     blocked_at: str | None = None
     stage_rows, player_rows, battle_rows = [], [], []
+    # CLAN FRIENDLY 2v2 SIDES, recorded by `duo_friendly` in the same
+    # transaction, so they share this read's cursor (and the raw purge's).
+    friendly_rows = []
 
     while True:
         chunk = cur.fetchmany(_READ_BATCH)
@@ -703,6 +707,7 @@ def _stage(con, src, since: str | None) -> dict:
                 continue
             got = False
             retryable_before = _retryable(problems)
+            friendly = df.is_clan_friendly(payload, r["game_mode"] or "")
             # Two sides are OFFERED by every 2v2 payload. Counting what was
             # offered as well as what was taken is what makes the shortfall
             # explainable rather than merely visible.
@@ -716,6 +721,10 @@ def _stage(con, src, since: str | None) -> dict:
                 got = True
                 sides_yielded += 1
                 touched.add(pair_fp)
+                if friendly:
+                    friendly_rows.extend(df.sides_for(
+                        payload, bid, r["battle_time"] or "",
+                        [(side, fp_a, fp_b, deck_a, deck_b, side_tags, pair_fp)]))
                 stage_rows.append((
                     bid, side, pair_fp, fp_a, fp_b,
                     json.dumps(deck_a), json.dumps(deck_b),
@@ -744,11 +753,11 @@ def _stage(con, src, since: str | None) -> dict:
                     blocked_at = stamp
 
         if len(stage_rows) >= _READ_BATCH:
-            sides += _flush(con, stage_rows, player_rows, battle_rows)
-            stage_rows, player_rows, battle_rows = [], [], []
+            sides += _flush(con, stage_rows, player_rows, battle_rows, friendly_rows)
+            stage_rows, player_rows, battle_rows, friendly_rows = [], [], [], []
 
-    if stage_rows:
-        sides += _flush(con, stage_rows, player_rows, battle_rows)
+    if stage_rows or friendly_rows:
+        sides += _flush(con, stage_rows, player_rows, battle_rows, friendly_rows)
 
     if blocked_at:
         # THE CURSOR IS A PROMISE THAT EVERYTHING AT OR BELOW IT IS PROCESSED,
@@ -780,7 +789,7 @@ def _stage(con, src, since: str | None) -> dict:
             "problems": dict(sorted(problems.items(), key=lambda kv: (-kv[1], kv[0])))}
 
 
-def _flush(con, stage_rows, player_rows, battle_rows=()) -> int:
+def _flush(con, stage_rows, player_rows, battle_rows=(), friendly_rows=()) -> int:
     """Write a staging batch. `INSERT OR IGNORE` IS THE DEDUPLICATION.
 
     A battle stored under several tracked players arrives here several times
@@ -811,6 +820,8 @@ def _flush(con, stage_rows, player_rows, battle_rows=()) -> int:
             "(battle_id, tag, battle_time, counted) VALUES (?,?,?,0)",
             battle_rows,
         )
+    if friendly_rows:
+        df.record(con, friendly_rows)
     con.commit()
     return inserted
 

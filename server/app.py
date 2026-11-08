@@ -64,6 +64,7 @@ import live_player as live  # noqa: E402
 import recent_battles as battles  # noqa: E402
 import player_decks as pdecks  # noqa: E402
 import duo_pairs as duo  # noqa: E402
+import duo_friendly  # noqa: E402
 import tracking  # noqa: E402
 import recruit  # noqa: E402
 import team_analysis as teams  # noqa: E402
@@ -786,6 +787,16 @@ class Handler(BaseHTTPRequestHandler):
                 # unknown one is dropped, so nothing from the query string
                 # reaches the SQL except as a bound parameter.
                 cards = [c for c in (q.get("cards") or [""])[0].split(",") if c]
+                # `kind=friendly` IS THE CLAN FRIENDLY BOARD (2026-11-08): the
+                # 50 most-played pairs per win condition over 30 days, from
+                # `duo_friendly`. Without it, the old all-time board, so a
+                # page loaded before the deploy keeps working.
+                if (q.get("kind") or [""])[0] == "friendly":
+                    return self._send(
+                        duo_friendly.report(
+                            page=page, per=per, cards=cards,
+                            sort=(q.get("sort") or [duo_friendly.DEFAULT_SORT])[0],
+                            win_condition=(q.get("wc") or [""])[0]))
                 return self._send(
                     duo.report(page=page, per=per,
                                query=(q.get("q") or [""])[0],

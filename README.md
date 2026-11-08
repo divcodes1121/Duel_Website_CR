@@ -16843,6 +16843,56 @@ redeployed yet", and the two halves of this project ship separately.
 
 ---
 
+## 2v2 Decks is clan friendly 2v2: 50 pairs per win condition (2026-11-08)
+
+Asked: "the decks are not updated and useless, ranked decks only are there — we
+need friendly battle 2v2 decks", then "we just want in-clan friendly 2v2, and we
+just need 50 decks for each win condition".
+
+**What was wrong.** The game stores ranked 2v2 and clan friendly 2v2 under ONE
+mode string, `TeamVsTeam`. Only the payload's `type` tells them apart: `trail`
+for the 2v2 ladder, `clanMate2v2` for a friendly against clanmates. Measured on
+2026-11-08: 17,859 ranked payloads against 533 friendly in one day. The old
+board (`duo_pairs` + `duo_retention`) folded both into one ALL-TIME count since
+July, so the top 50 per win condition were months-old ladder pairs and a
+friendly pair could never reach it (cuts of 20-400 battles).
+
+**What it is now.** `server/duo_friendly.py`:
+
+- `duo_pairs._stage` hands every `clanMate2v2` payload's pairs to
+  `duo_friendly.record`, in the same transaction, so friendly sides share the
+  fold's cursor — the raw 2v2 purge cannot delete one before it is recorded.
+- `df_side`: one row per (battle, side), deduplicated by `battle_identity`;
+  kept for `WINDOW_DAYS` (30).
+- `df_board`: rebuilt every hour (`duo_friendly.py --refresh`, third step of
+  `royalweb-duo.service`): for each of the 17 win conditions (the bot's own
+  map, `duo_retention.win_conditions`), the 50 most-played pairs in the window,
+  newest last battle on a tie. A pair is filed under each of its decks' win
+  conditions.
+- Draft / event-deck / Royale Shuffle clan 2v2 stays out (not own decks).
+- Route: `/api/analytics/duo-pairs?kind=friendly&wc=<win con>` (+ the old
+  `page`, `per`, `sort`, `cards`). Without `kind` the old all-time board still
+  answers. Route count unchanged.
+
+**Screen.** `#/duo` asks for `kind=friendly` only. One chip per win condition
+(card art, how many pairs its list holds, greyed when empty) above the existing
+card filter, sort and page size. The row is still the two decks and nothing
+else.
+
+**No friendly history before the deploy.** Raw 2v2 is purged ~1-2 days behind
+the fold, and `duo_stage` never recorded the `type`. `duo_friendly.py
+--backfill` records what is still in `battle_raw`; the 30-day window fills from
+there.
+
+**The ranked collection is untouched** and still updates hourly; only the screen
+stopped showing it. Bringing back a Ranked / Friendly switch is one parameter.
+
+Tests: `server/test_duo_friendly.py` 31 (ranked never recorded though the mode
+string is the same, one battle stored twice = one game, top-N per win
+condition, window drop, tie order); faults planted for each and caught.
+`tests/duoRoute.test.ts` updated. Browser 22/22 on a generated friendly payload
+(both themes, 1440 and 390).
+
 ## 2v2 Decks — the data is migrated, not deleted
 
 The obvious fix for 2v2 was to stop reading `TeamVsTeam` rows. It was rejected:

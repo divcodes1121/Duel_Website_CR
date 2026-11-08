@@ -165,11 +165,19 @@ describe('the page itself', () => {
     expect(page).not.toMatch(/deckA[\s\S]{0,200}\bVS\b[\s\S]{0,200}deckB/);
   });
 
-  it('says which population it speaks for', () => {
-    /* Per-player detail is kept for a bounded top slice, so a board that did
-       not say so reads as a complete census of 2v2, which it is not. */
-    expect(page).toContain('populationLimit');
-    expect(page).toContain('Population: Top');
+  it('asks for the clan friendly board and says what it is', () => {
+    /* 2026-11-08: the screen shows CLAN FRIENDLY 2v2 only, the 50 most-played
+       pairs per win condition over a rolling window. Ranked and friendly 2v2
+       share one mode string (`TeamVsTeam`); the server tells them apart. */
+    expect(client).toContain("kind: 'friendly'");
+    expect(page).toContain('Clan friendly 2v2');
+    expect(page).toContain('perWinCondition');
+    expect(page).toContain('windowDays');
+  });
+
+  it('narrows by win condition on the server', () => {
+    expect(client).toContain("q.set('wc', winCondition)");
+    expect(page).toContain('void load(1, picked, sort, per, key)');
   });
 
   it('sorts, pages and FILTERS on the server', () => {
@@ -177,7 +185,7 @@ describe('the page itself', () => {
        quietly answer for 25 rows while appearing to answer for the
        collection. */
     expect(page).not.toMatch(/report\.pairs[\s.]*(filter|sort)\(/);
-    expect(page).toContain('void load(1, next, sort, per)');
+    expect(page).toContain('void load(1, next, sort, per, wc)');
     expect(client).toContain("q.set('cards', cards.join(','))");
   });
 

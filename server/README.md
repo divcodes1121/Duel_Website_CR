@@ -529,6 +529,18 @@ the same battle is stored two or four times. `battle_identity` is built from the
 battle's own timestamp and its four sorted tags, and `duo_stage`'s
 `PRIMARY KEY (battle_id, side)` enforces the dedup rather than hoping.
 
+### The clan friendly board (`duo_friendly.py`, 2026-11-08)
+
+Ranked and clan friendly 2v2 share the mode `TeamVsTeam`; the payload `type`
+(`trail` / `clanMate2v2`) is the only difference. `duo_pairs._stage` records
+each `clanMate2v2` battle's pairs into `df_side` (30 days, deduplicated by
+battle) in its own transaction, so they share the fold cursor that the raw 2v2
+purge respects. `duo_friendly.py --refresh` (in `royalweb-duo.service`, after
+the fold and the retention step) drops old sides and rebuilds `df_board`: the
+50 most-played pairs per win condition. `/api/analytics/duo-pairs?kind=friendly`
+reads it (`wc=` narrows to one win condition). `--backfill` records what is
+still in `battle_raw` (two passes: mode first, JSON of 2v2 rows only).
+
 ### Running it
 
     python server/duo_pairs.py --coverage    # how much can be reconstructed

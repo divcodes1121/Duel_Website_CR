@@ -70,6 +70,69 @@
   color: var(--text-muted);
 }
 
+/* ── Win condition chips ─────────────────────────────────────────────────
+   One chip per win condition, each opening its own top-50 list. Wraps on a
+   phone rather than scrolling sideways. */
+.wcRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.wcChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0.2rem 0.6rem 0.2rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+}
+
+.wcChip:first-child {
+  padding-left: 0.75rem;
+}
+
+.wcChip:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.wcChip[aria-pressed='true'] {
+  background: var(--solid-violet);
+  border-color: var(--solid-violet);
+  color: var(--on-solid);
+}
+
+.wcChip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.wcArt {
+  width: 1.3rem;
+  height: auto;
+  flex: none;
+}
+
+.wcCount {
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+@media (pointer: coarse) {
+  .wcChip {
+    min-height: 2.5rem;
+  }
+}
+
 /* ── Controls ────────────────────────────────────────────────────────────── */
 
 /* THE FILTER LEADS AND THE TWO SELECTS FOLLOW. `WinConFilter` hangs a 30rem
