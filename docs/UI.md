@@ -2286,6 +2286,10 @@ in `utils/bringAgainst.ts` (type imports only), `tests/bringAgainst.test.ts`.
   the row never changes shape. Picked = `--solid-violet` with `--on-solid`. Chips wrap on a phone;
   a coarse pointer gets 2.5rem targets.
 - The row is still the two decks and nothing else — no games count, no players. Rank is the order.
+- **Archetype tags (2026-11-09).** Picking a family that splits opens a second, smaller row under the
+  chips (outlined pills, a violet rule on the left): `All <family>` then each tag with its pair count.
+  The family chip stays lit while a tag is picked. Each deck's head reads its tag (upper case, one
+  line, ellipsis, the full name in the title) instead of "Deck A / Deck B". The bait chip says "Bait".
 
 ## Duel Analysis: day chips and the G1 / G2 / G3 order (2026-11-09)
 

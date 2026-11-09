@@ -282,6 +282,7 @@ See [The Opponent Intelligence Engine](#the-opponent-intelligence-engine) and
 40b. [2v2 Decks — the data is migrated, not deleted](#2v2-decks--the-data-is-migrated-not-deleted)
 40c. [2v2 Decks is clan friendly 2v2: 50 pairs per win condition (2026-11-08)](#2v2-decks-is-clan-friendly-2v2-50-pairs-per-win-condition-2026-11-08)
 40d. [2v2 Decks is top players' 2v2: 50 pairs per win condition (2026-11-09)](#2v2-decks-is-top-players-2v2-50-pairs-per-win-condition-2026-11-09)
+40e. [2v2 Decks: archetype tags inside each family (2026-11-09)](#2v2-decks-archetype-tags-inside-each-family-2026-11-09)
 40c. [Decks — every deck a player is using](#decks--every-deck-a-player-is-using-2026-10-04)
 40d. [All Duels — friendly duels that went to three games](#all-duels--friendly-duels-that-went-to-three-games-2026-10-05)
 41. [Saving a duel you actually played](#saving-a-duel-you-actually-played)
@@ -367,7 +368,8 @@ python server/test_data_lifecycle.py # 42 checks (46 on the VPS, with dbstream) 
 python server/test_ladder_raw_purge.py # 15 checks: only old ladder raw goes; duel, NULL-mode and 2v2 never
 python server/test_duo_retention.py # 76 checks: the 2v2 collection keeps the top pairs per win condition
 python server/test_duo_raw_purge.py # 35 checks: 2v2 raw goes only behind the fold's cursor
-python server/test_duo_friendly.py # 46 checks: the 2v2 board — top players only, ranked + clan friendly, 50 per win condition
+python server/test_archetype_tags.py # 25 checks: the archetype tags, rule order and fallbacks
+python server/test_duo_friendly.py # 51 checks: the 2v2 board — top players only, ranked + clan friendly, 50 per win condition
 python server/test_tracking.py    # 30 checks over the tag queue, its prune and the tracking history
 python server/test_enrol_routes.py # 34 checks: every tag route queues the tag it was asked about
 python server/test_admin_auth.py  # 24 checks over the admin gate asked of Supabase
@@ -16849,6 +16851,57 @@ redeployed yet", and the two halves of this project ship separately.
 
 ---
 
+## 2v2 Decks: archetype tags inside each family (2026-11-09)
+
+Asked: "Bridge Spam is not generalised — Mega Knight bridge spam, Giant
+Skeleton bridge spam ... Log Bait with MK and normal Log Bait are different,
+Knight Log Bait is different, with Valkyrie and Goblin Barrel it is Hyper Bait
+as it is very cheap ... search online all the tags and change the tagging."
+
+**The family stays the bot's.** `deck_counter._archetype_of_hash` still decides
+which of the 17 families a deck is in, and every model, matchup table and
+folder keeps reading it. `server/archetype_tags.py` (pure, no imports) adds a
+TAG one level below: the name players give a deck inside its family. First
+rule that matches wins, and a deck no rule names keeps the family's plain name.
+
+**The names** are the ones that recur across RoyaleTracker, StatsRoyale,
+RoyaleAPI's season deck posts and guild wikis, plus the account holder's:
+
+| Family | Tags |
+|---|---|
+| Bridge Spam | MK Bridge Spam, P.E.K.K.A Bridge Spam, Giant Skeleton Bridge Spam |
+| Bait | MK Bait, Hyper Bait (Valkyrie, or ≤2.9 elixir with Skeleton Barrel / Wall Breakers / Bush), Mortar Bait, Hog Bait, Bridge Spam Bait, Giant Bait, Minion Giant Bait, Knight Log Bait, Log Bait |
+| Hog | Hog 2.6, Hog EQ, Hog Exe Nado, Hog Cycle (≤3.0) |
+| Graveyard | Graveyard Freeze, Giant Graveyard, Splashyard, Graveyard Poison |
+| Golem | Golem Night Witch, Golem Pump |
+| Miner | Miner Loon, Miner Wall Breakers, MK Miner, Miner Poison |
+| Others | Royal Hogs EQ, Lava Loon, Lava Miner, Loon Freeze, Miner Loon, Loon Cycle, X-Bow 3.0, Mortar Bait, Mortar Cycle, Giant Double Prince, Giant Graveyard, Giant Sparky, RG Fisherman, E-Giant Tornado, Drill Cycle, 3M Pump |
+
+The second win condition names a bait deck because the bot files ANY deck
+with Goblin Barrel or Wall Breakers as bait: measured on the 2v2 board, Mortar,
+Hog, Battle Ram and Giant decks with a barrel were most of what was left plain
+"Log Bait".
+
+**Measured on the live 2v2 board (2,464 deck-sides):** Bridge Spam 304 -> MK 123,
+Giant Skeleton 92, P.E.K.K.A 43, plain 46; Bait 382 -> MK Bait 99, Hyper Bait
+61, Mortar Bait 59, Knight Log Bait 40, Bridge Spam Bait 24, Hog Bait 6, plain
+Log Bait 93; Golem 213 -> Pump 99, Night Witch 72, plain 42; Hog 178 -> Exe Nado
+41, 2.6 30, EQ 24, Cycle 9, plain 74; Graveyard 147 -> Poison 72, Splashyard
+37, Freeze 25, plain 13.
+
+**On the screen:** the family chips stay (the bait chip reads "Bait" now);
+picking a family that splits opens a second row of its tags, each holding its
+own top 50 (`df_board` buckets `t:<family>:<slug>`, labels in `df_meta`), and
+every deck on a row is labelled with its tag instead of "Deck A / Deck B".
+Route: `wc=` takes a family key or a tag key.
+
+**Only the 2v2 screen uses the tags so far.** The meta board, Team Analysis and
+Coach Assist still print family names.
+
+Tests: `test_archetype_tags.py` 25 (rule order: an MK deck that is also cheap is
+MK Bait; fallbacks; keys), `test_duo_friendly.py` 51, `duoRoute.test.ts`.
+Browser 16/16 locally on a generated payload, both themes.
+
 ## Duel Analysis: day chips and a G1 / G2 / G3 order (2026-11-09)
 
 Asked: "7D, 15D, 28D, 45D, 60D filter, and the pairs should be arranged by G1
@@ -20452,6 +20505,8 @@ server/
   duo_pairs.py                the 2v2 deck-pair collection (own file, hourly timer)
   duo_raw_purge.py, duo_retention.py
                               the bounds on the 2v2 raw payloads and the collection
+  archetype_tags.py           the name a deck gets inside its family (MK Bridge Spam,
+                              Hyper Bait, Hog 2.6 ...). No imports
   duo_friendly.py             the 2v2 screen's board: top players' ranked + clan
                               friendly pairs, 30 days, 50 per win condition (hourly)
   retention.py                deletes battles one battle-day at a time past the

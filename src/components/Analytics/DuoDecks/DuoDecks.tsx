@@ -78,7 +78,9 @@ function Deck({ deck, side, align }: { deck: DuoDeck; side: string; align: 'star
   return (
     <div className={styles.deck} data-align={align}>
       <div className={styles.deckHead}>
-        <span className={styles.deckSide}>{side}</span>
+        {/* THE DECK'S ARCHETYPE TAG, not "Deck A" (2026-11-09): what a player
+            would call it — MK Bridge Spam, Hyper Bait, Hog 2.6. */}
+        <span className={styles.deckSide} title={deck.tag ? `${side} · ${deck.tag}` : side}>{deck.tag ?? side}</span>
         <span className={styles.deckElixir} title="Average elixir">
           {deck.avgElixir}
         </span>
@@ -209,6 +211,14 @@ export function DuoDecks() {
   }
 
   const summary = report?.summary;
+  /* A tag key is `t:<family>:<slug>`; its family lights the first row. */
+  const wcKey = report?.winCondition ?? '';
+  const pickedFamily = wcKey.startsWith('t:') ? wcKey.slice(2).split(':')[0] : wcKey;
+  const familyTags = pickedFamily
+    ? (report?.tags ?? []).filter((t) => t.family === pickedFamily)
+    : [];
+  const familyLabel =
+    report?.winConditions?.find((w) => w.key === pickedFamily)?.label ?? '';
 
   return (
     <div className={styles.page}>
@@ -245,13 +255,42 @@ export function DuoDecks() {
               key={w.key}
               type="button"
               className={styles.wcChip}
-              aria-pressed={report.winCondition === w.key}
+              aria-pressed={pickedFamily === w.key}
               disabled={!w.pairs}
               onClick={() => pickWinCondition(w.key)}
             >
               {w.card && <CardArt card={w.card} className={styles.wcArt} />}
               <span>{w.label}</span>
               <span className={styles.wcCount}>{w.pairs}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* THE TAGS INSIDE THE PICKED FAMILY (2026-11-09): Bridge Spam opens MK,
+          P.E.K.K.A and Giant Skeleton Bridge Spam; Bait opens MK Bait, Hyper
+          Bait, Knight Log Bait ... Each holds its own fifty. Drawn only when
+          the family splits into two or more. */}
+      {familyTags.length >= 2 && (
+        <div className={styles.tagRow} role="group" aria-label="Archetype">
+          <button
+            type="button"
+            className={styles.tagChip}
+            aria-pressed={report?.winCondition === pickedFamily}
+            onClick={() => pickWinCondition(pickedFamily)}
+          >
+            All {familyLabel}
+          </button>
+          {familyTags.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={styles.tagChip}
+              aria-pressed={report?.winCondition === t.key}
+              onClick={() => pickWinCondition(t.key)}
+            >
+              <span>{t.label}</span>
+              <span className={styles.wcCount}>{t.pairs}</span>
             </button>
           ))}
         </div>

@@ -262,11 +262,19 @@ def cutoff(now: datetime.datetime | None = None, days: int = WINDOW_DAYS) -> str
     return _stamp(now - datetime.timedelta(days=days))
 
 
-def build_board(rows, win_conditions, per: int = PER_WIN_CONDITION) -> list[tuple]:
+#: A bucket key that is an archetype TAG (`archetype_tags`), not a family.
+TAG_PREFIX = "t:"
+
+
+def build_board(rows, win_conditions, per: int = PER_WIN_CONDITION, tags=None) -> list[tuple]:
     """Pure: `rows` = (pair_fp, battle_time, deck_a_fp, deck_b_fp, deck_a,
     deck_b, tags_json) for every side in the window. Returns `df_board` rows,
     top `per` pairs for each win condition by games, newest last battle on a
-    tie, then fingerprint so the order is stable."""
+    tie, then fingerprint so the order is stable.
+
+    `tags(deck_a, deck_b)` -> the archetype tag keys of the pair's two decks
+    (2026-11-09); each gets its own top `per` bucket under `TAG_PREFIX`, so
+    "MK Bridge Spam" holds its own fifty rather than sharing Bridge Spam's."""
     pairs: dict[str, dict] = {}
     for fp, bt, fa, fb, da, db, tg in rows:
         p = pairs.get(fp)
@@ -286,6 +294,9 @@ def build_board(rows, win_conditions, per: int = PER_WIN_CONDITION) -> list[tupl
     for fp, p in pairs.items():
         for wc in win_conditions(p["da"], p["db"]):
             buckets.setdefault(wc, []).append((fp, p))
+        if tags is not None:
+            for key in set(tags(p["da"], p["db"])):
+                buckets.setdefault(TAG_PREFIX + key, []).append((fp, p))
     out = []
     for wc, items in buckets.items():
         items.sort(key=lambda it: it[0])
@@ -316,7 +327,18 @@ def refresh(con=None, now: datetime.datetime | None = None, fetch: bool = True,
         rows = con.execute(
             "SELECT pair_fp, battle_time, deck_a_fp, deck_b_fp, deck_a, deck_b, tags "
             "FROM df_side").fetchall()
-        board = build_board([tuple(r) for r in rows], dr.win_conditions)
+        labels: dict[str, str] = {}
+
+        def pair_tags(da, db):
+            out = []
+            for d in (da, db):
+                t = deck_tag(d)
+                labels[TAG_PREFIX + t["key"]] = t["label"]
+                out.append(t["key"])
+            return out
+
+        board = build_board([tuple(r) for r in rows], dr.win_conditions, tags=pair_tags)
+        _meta_set(con, "tag_labels", json.dumps(labels, sort_keys=True))
         con.execute("DELETE FROM df_board")
         con.executemany("INSERT INTO df_board VALUES (?,?,?,?,?,?,?,?,?,?,?)", board)
         battles = con.execute("SELECT COUNT(DISTINCT battle_id) FROM df_side").fetchone()[0]
@@ -431,12 +453,43 @@ def _cards() -> dict[str, str]:
         return {}
 
 
+#: Family chips that read differently once the family splits into tags: the
+#: bait family holds MK Bait and Hyper Bait as well as Log Bait, so its chip
+#: says "Bait" and "Log Bait" is the classic tag inside it.
+CHIP_NAMES = {"bait": "Bait"}
+
+
 def _labels() -> dict[str, str]:
     try:
         import deck_counter as dcx
-        return {wc: dcx._label(wc) for wc in _all_win_conditions()}
+        return {wc: CHIP_NAMES.get(wc) or dcx._label(wc) for wc in _all_win_conditions()}
     except Exception:  # noqa: BLE001
         return {}
+
+
+_TAG_CACHE: dict[str, dict] = {}
+
+
+def deck_tag(deck_json) -> dict:
+    """The archetype tag of one stored deck (`archetype_tags.tag`): its family
+    is the bot's own (`deck_counter._archetype_of_hash`), a deck outside the
+    bot's map is named by its win condition (`clash_data.deck_title`)."""
+    key = deck_json if isinstance(deck_json, str) else json.dumps(list(deck_json))
+    hit = _TAG_CACHE.get(key)
+    if hit is not None:
+        return hit
+    import archetype_tags as at
+    import clash_data as cd
+    import deck_counter as dcx
+    import duel_combos as dx
+    cards = json.loads(key) if isinstance(deck_json, str) else list(deck_json)
+    family = dcx._archetype_of_hash(",".join(sorted(cards)))
+    other = cd.deck_title(family, cards) if family == "other" else None
+    out = at.tag(cards, family, lambda k: dx.card_info(k).get("elixir") or 0, other)
+    if len(_TAG_CACHE) > 20000:
+        _TAG_CACHE.clear()
+    _TAG_CACHE[key] = out
+    return out
 
 
 def _all_win_conditions() -> tuple[str, ...]:
@@ -459,11 +512,16 @@ def report(page: int = 1, per: int = PER_PAGE, sort: str = DEFAULT_SORT,
     picked = dp.valid_cards(cards)
     known = _all_win_conditions()
     wc = (win_condition or "").strip().lower()
-    if wc not in known:
-        wc = ""
     con = dp._connect()
     try:
         ensure(con)
+        try:
+            tag_labels = json.loads(_meta_get(con, "tag_labels") or "{}")
+        except Exception:  # noqa: BLE001
+            tag_labels = {}
+        # A family key or a tag key the board holds; anything else is "all".
+        if wc not in known and wc not in tag_labels:
+            wc = ""
         if wc:
             base = ("SELECT pair_fp, games, players, first_seen, last_seen, deck_a_fp, "
                     "deck_b_fp, deck_a, deck_b FROM df_board WHERE win_condition = ?")
@@ -508,8 +566,20 @@ def report(page: int = 1, per: int = PER_PAGE, sort: str = DEFAULT_SORT,
             "player_tags": "[]", "first_seen": r["first_seen"],
             "last_seen": r["last_seen"], "source_modes": "TeamVsTeam",
         }
-        out_rows.append(dp._pair_row(row, seat))
+        pr = dp._pair_row(row, seat)
+        # EACH DECK CARRIES ITS TAG, so the row says "MK Bridge Spam + Hyper
+        # Bait" rather than "Deck A + Deck B".
+        pr["deckA"]["tag"] = deck_tag(r["deck_a"])["label"]
+        pr["deckB"]["tag"] = deck_tag(r["deck_b"])["label"]
+        out_rows.append(pr)
     chip_cards = _cards()
+    tag_rows = []
+    for k, label in tag_labels.items():
+        n = counts.get(k, 0)
+        if n:
+            fam = k[len(TAG_PREFIX):].split(":", 1)[0]
+            tag_rows.append({"key": k, "label": label, "family": fam, "pairs": n})
+    tag_rows.sort(key=lambda t: (t["family"], -t["pairs"], t["label"].lower()))
     wcs = [{"key": k, "label": labels.get(k, k), "pairs": counts.get(k, 0),
             "card": chip_cards.get(k)} for k in known]
     wcs.sort(key=lambda w: (w["key"] == "other", w["label"].lower()))
@@ -527,6 +597,8 @@ def report(page: int = 1, per: int = PER_PAGE, sort: str = DEFAULT_SORT,
         "sorts": sorted(SORTS),
         "winCondition": wc,
         "winConditions": wcs,
+        # The archetype tags inside each family, for the second chip row.
+        "tags": tag_rows,
         "perWinCondition": PER_WIN_CONDITION,
         "windowDays": WINDOW_DAYS,
         "summary": {

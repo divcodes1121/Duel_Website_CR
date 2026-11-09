@@ -175,6 +175,15 @@ describe('the page itself', () => {
     expect(page).toContain('windowDays');
   });
 
+  it('opens the archetype tags inside the picked family, and names each deck by its tag', () => {
+    /* 2026-11-09: Bridge Spam opens MK / P.E.K.K.A / Giant Skeleton Bridge
+       Spam, Bait opens MK Bait / Hyper Bait / Knight Log Bait ... The tags come
+       from the server (`archetype_tags.py`); the screen only draws them. */
+    expect(page).toContain('aria-label="Archetype"');
+    expect(page).toContain('familyTags');
+    expect(page).toContain('{deck.tag ?? side}');
+  });
+
   it('narrows by win condition on the server', () => {
     expect(client).toContain("q.set('wc', winCondition)");
     expect(page).toContain('void load(1, picked, sort, per, key)');

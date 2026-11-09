@@ -292,6 +292,25 @@ with Fixture([("#AA", FRIENDLY), ("#BB", FRIENDLY_COPY), ("#AA", FRIENDLY_2),
           cards["total"] == 1 and all("golem" in p["deckA"]["cardKeys"] or
                                       "golem" in p["deckB"]["cardKeys"] for p in cards["pairs"]))
 
+    # ARCHETYPE TAGS (2026-11-09): a bucket per tag, a tag on every deck.
+    check("the report lists tags, each under its family",
+          rep["tags"] and all(t["key"].startswith(df.TAG_PREFIX) and
+                              t["key"][2:].split(":")[0] == t["family"] for t in rep["tags"]),
+          str(rep["tags"]))
+    check("every deck on a row carries its tag",
+          all(isinstance(p["deckA"].get("tag"), str) and p["deckA"]["tag"] and
+              isinstance(p["deckB"].get("tag"), str) and p["deckB"]["tag"] for p in rep["pairs"]))
+    some = rep["tags"][0]
+    by_tag = df.report(win_condition=some["key"], per=50)
+    check("a tag key narrows the board to that tag",
+          by_tag["winCondition"] == some["key"] and by_tag["total"] == some["pairs"] and
+          all(some["label"] in (p["deckA"]["tag"], p["deckB"]["tag"]) for p in by_tag["pairs"]),
+          str((some, by_tag["total"])))
+    check("an unknown tag key falls back to all",
+          df.report(win_condition="t:bait:nope")["winCondition"] == "")
+    check("the deck tag is the family's when no rule names it",
+          df.deck_tag(json.dumps(GOLEM))["family"] == "golem")
+
     kept_top = df.refresh(now=NOW, get=fake_board([], status=503), cohorts={})
     check("a failed board read keeps the last top set",
           kept_top["top"]["kept"] and kept_top["top"]["players"] == 2, str(kept_top["top"]))

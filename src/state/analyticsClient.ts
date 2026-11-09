@@ -3211,6 +3211,9 @@ export function fetchTeamAnalysis(
 
 /** One deck inside a 2v2 partnership. */
 export interface DuoDeck {
+  /** The deck's archetype tag (`server/archetype_tags.py`, 2026-11-09): "MK Bridge
+   *  Spam", "Hyper Bait", "Hog 2.6" ... Absent from an older server. */
+  tag?: string;
   /** `2v2d:<sha1 of the sorted card keys>`. Order-free by construction. */
   fingerprint: string;
   /** SEATED ORDER — evolution, hero, wild first, by `arrange_deck`. The
@@ -3288,6 +3291,9 @@ export interface DuoReport {
   /** Every win condition with how many pairs its list holds, for the chips.
    *  `card` is a card to draw on the chip (none for `other`). */
   winConditions?: { key: string; label: string; pairs: number; card?: string | null }[];
+  /** The archetype tags inside each family (`t:<family>:<slug>`), with how many
+   *  pairs each one's list holds — the second chip row. */
+  tags?: { key: string; label: string; family: string; pairs: number }[];
   /** Pairs kept per win condition (50). */
   perWinCondition?: number;
   /** The rolling window the board ranks over, in days (30). */

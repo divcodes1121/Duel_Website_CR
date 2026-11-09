@@ -529,6 +529,17 @@ the same battle is stored two or four times. `battle_identity` is built from the
 battle's own timestamp and its four sorted tags, and `duo_stage`'s
 `PRIMARY KEY (battle_id, side)` enforces the dedup rather than hoping.
 
+### Archetype tags (`archetype_tags.py`, 2026-11-09)
+
+A tag is the name players give a deck INSIDE its family (MK / P.E.K.K.A / Giant
+Skeleton Bridge Spam; MK Bait, Hyper Bait, Knight Log Bait; Hog 2.6 ...). The
+family stays `deck_counter._archetype_of_hash`; a tag never moves a deck to
+another family. Pure, first rule wins, a deck no rule names keeps the family's
+plain name. `duo_friendly.deck_tag(deck)` applies it; `refresh` adds a top-50
+bucket per tag (`t:<family>:<slug>`) and stores the labels (`df_meta
+tag_labels`); `report` returns `tags` and a `tag` on each deck. Only the 2v2
+screen uses it so far.
+
 ### The top players' board (`duo_friendly.py`, 2026-11-09)
 
 Since 2026-11-09 the board holds ranked AND clan friendly 2v2, but only sides

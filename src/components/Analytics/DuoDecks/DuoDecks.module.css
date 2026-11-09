@@ -133,6 +133,47 @@
   }
 }
 
+/* The tags inside the picked family: smaller, outlined, under the first row. */
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: -0.4rem;
+  padding-left: 0.5rem;
+  border-left: 2px solid var(--solid-violet);
+}
+
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.8rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tagChip:hover {
+  border-color: var(--border-strong);
+}
+
+.tagChip[aria-pressed='true'] {
+  border-color: var(--solid-violet);
+  background: color-mix(in srgb, var(--solid-violet) 18%, transparent);
+}
+
+@media (pointer: coarse) {
+  .tagChip {
+    min-height: 2.4rem;
+  }
+}
+
 /* ── Controls ────────────────────────────────────────────────────────────── */
 
 /* THE FILTER LEADS AND THE TWO SELECTS FOLLOW. `WinConFilter` hangs a 30rem
@@ -273,9 +314,15 @@
 }
 
 .deckSide {
-  font-size: 0.66rem;
+  /* The archetype tag now ("Giant Skeleton Bridge Spam"), so it may be long:
+     one line, cut with an ellipsis, the full name in the title. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
