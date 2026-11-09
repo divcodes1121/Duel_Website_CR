@@ -16843,6 +16843,23 @@ redeployed yet", and the two halves of this project ship separately.
 
 ---
 
+## Duel Analysis: day chips and a G1 / G2 / G3 order (2026-11-09)
+
+Asked: "7D, 15D, 28D, 45D, 60D filter, and the pairs should be arranged by G1
+most usage, with a switch G1 / G2 / G3 to see the pairs of those games' usage".
+
+- The date button and its menu are gone. Five chips sit in the header
+  (`DUEL_ANALYSIS_DAY_PRESETS` in `utils/datePresets.ts`, opening on **28D**),
+  with the window's dates beside them. A season picked in the shell still sets
+  a month; then no chip is lit and the dates say which month.
+- The combo table is ordered by one game slot's share (`utils/duelSlots.ts`
+  `bySlot`, ties on use rate), G1 by default, switched with a G1 / G2 / G3 strip
+  beside the table title. Hidden when the rows come from non-duel battles, which
+  have no slots. The PDF export is unchanged (server order).
+- No server change: `days` is clamped to 1..4000, so 28 is accepted as is.
+- `tests/duelSlots.test.ts` 6. Browser 18/18 locally on production data (both
+  themes, 1440 and 390).
+
 ## 2v2 Decks is top players' 2v2: 50 pairs per win condition (2026-11-09)
 
 Asked the day after the clan friendly board shipped: "the 2v2 decks right now

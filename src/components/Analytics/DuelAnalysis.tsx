@@ -12,7 +12,9 @@ import {
 } from '../../state/analyticsClient';
 import { ReadingState } from './ReadingState';
 import { Tabs } from '../ui/tabs';
-import { RANGE_PRESETS, useDateWindow, type Season } from './playerData';
+import { useDateWindow, type Season } from './playerData';
+import { DUEL_ANALYSIS_DAY_PRESETS, DUEL_ANALYSIS_DEFAULT_DAYS } from '../../utils/datePresets';
+import { bySlot } from '../../utils/duelSlots';
 import styles from './DuelAnalysis.module.css';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
 
@@ -85,6 +87,9 @@ const pct = (v: number) => `${v.toFixed(1)}%`;
 const PAGE = 8;
 
 const SLOT_NAMES = ['G1', 'G2', 'G3'] as const;
+
+type SlotId = 'g1' | 'g2' | 'g3';
+const SLOT_IDS: SlotId[] = ['g1', 'g2', 'g3'];
 
 /** '2026-08-10' -> '10 Aug'. */
 function shortDay(iso: string | null): string {
@@ -181,15 +186,18 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
   const [tab, setTab] = useState<TabId>('win-conditions');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  /* Which game slot the table is ordered by. G1 first: the deck a player
+     opens a duel with. */
+  const [slotSort, setSlotSort] = useState<SlotId>('g1');
   const [report, setReport] = useState<DuelReport | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [loading, setLoading] = useState(true);
   const reading = useHeldLoading(loading);
 
-  const { win, preset, setPreset, custom, setCustom } = useDateWindow(
+  const { win, preset, setPreset, custom } = useDateWindow(
     season,
     report?.coverage.end ?? null,
+    DUEL_ANALYSIS_DEFAULT_DAYS,
   );
 
   /* The export carries ALL THREE TABS and the Duel Insights panel at the
@@ -237,7 +245,7 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
   useEffect(() => {
     setExpanded(null);
     setShowAll(false);
-  }, [tab]);
+  }, [tab, slotSort]);
 
   if (reading) {
     return (
@@ -311,82 +319,31 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
           <div className={styles.headTools}>
             {/* See the note in DuelZone: same placement, same dynamic import. */}
             {exportButton}
-            <div className={styles.rangeWrap}>
-              <button
-                type="button"
-                className={styles.rangeButton}
-                aria-expanded={pickerOpen}
-                onClick={() => setPickerOpen((o) => !o)}
-              >
+            {/* THE WINDOWS ARE CHIPS ON THE SCREEN (2026-11-09), not a menu
+                behind a date button: 7, 15, 28, 45 and 60 days, asked for by
+                name. A season picked in the shell still sets a month, and then
+                no chip is lit and the dates beside them say which month. */}
+            <div className={styles.dayChips} role="group" aria-label="Days">
+              {DUEL_ANALYSIS_DAY_PRESETS.map((d) => {
+                const beyond = d > report.coverage.days;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    className={`${styles.rangeChip} ${preset === d ? styles.rangeChipOn : ''}`}
+                    aria-pressed={preset === d}
+                    title={beyond ? `Only ${report.coverage.days} days stored for this player` : `Last ${d} days`}
+                    data-beyond={beyond ? '' : undefined}
+                    onClick={() => setPreset(d)}
+                  >
+                    {d}D
+                  </button>
+                );
+              })}
+              <span className={styles.dayRange} title={preset === -1 && custom.from ? 'Set by the season' : undefined}>
                 {ICONS.calendar}
                 {shortDay(report.window.from)} – {shortDay(report.window.to)}
-              </button>
-
-              {pickerOpen && (
-                <div className={styles.rangePop}>
-                  <span className={styles.rangePopLabel}>Preset</span>
-                  <div className={styles.rangePresets}>
-                    {RANGE_PRESETS.map((r) => (
-                      <button
-                        key={r.label}
-                        type="button"
-                        className={`${styles.rangeChip} ${preset === r.days ? styles.rangeChipOn : ''}`}
-                        title={
-                          r.days > 0 && r.days > report.coverage.days
-                            ? `Only ${report.coverage.days} days stored for this player`
-                            : undefined
-                        }
-                        data-beyond={r.days > 0 && r.days > report.coverage.days ? '' : undefined}
-                        onClick={() => {
-                          setPreset(r.days);
-                          if (r.days !== -1) setPickerOpen(false);
-                        }}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <span className={styles.rangePopLabel}>Custom range</span>
-                  <div className={styles.rangeDates}>
-                    <label className={styles.rangeField}>
-                      <span>From</span>
-                      <input
-                        type="date"
-                        value={custom.from || report.window.from || ''}
-                        min={report.coverage.start ?? undefined}
-                        max={custom.to || report.coverage.end || undefined}
-                        onChange={(e) => setCustom((c) => ({ ...c, from: e.target.value }))}
-                      />
-                    </label>
-                    <label className={styles.rangeField}>
-                      <span>To</span>
-                      <input
-                        type="date"
-                        value={custom.to || report.window.to || ''}
-                        min={custom.from || report.coverage.start || undefined}
-                        max={report.coverage.end ?? undefined}
-                        onChange={(e) => setCustom((c) => ({ ...c, to: e.target.value }))}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className={styles.rangeApply}
-                      disabled={!custom.from || !custom.to}
-                      onClick={() => {
-                        setPreset(-1);
-                        setPickerOpen(false);
-                      }}
-                    >
-                      Apply
-                    </button>
-                  </div>
-
-                  <p className={styles.rangeNote}>
-                    Stored: {report.coverage.start} to {report.coverage.end}
-                  </p>
-                </div>
-              )}
+              </span>
             </div>
           </div>
         </header>
@@ -425,7 +382,9 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
         {tabsToRender.map((tabId) => {
           const t = report.tabs[tabId];
           const unmeasured = tabId === 'evolutions' && evoUnmeasured;
-          const rows = showAll ? t.rows : t.rows.slice(0, PAGE);
+          const slot = SLOT_IDS.indexOf(slotSort);
+          const ordered = hasSlots ? bySlot(t.rows, slot) : t.rows;
+          const rows = showAll ? ordered : ordered.slice(0, PAGE);
           // One ruler for every G1/G2/G3 bar in THIS tab, taken from the whole
           // tab rather than the visible page so "view all" cannot rescale rows
           // already on screen.
@@ -485,6 +444,22 @@ export function DuelAnalysis({ tag, season = 'Current Season' }: { tag: string; 
             {/* `noun` is the singular — "Top Win Condition Combos", not
                 "Top Win Conditions Combos". */}
             <h2 className={styles.tableTitle}>Top {t.noun} Combos</h2>
+            {/* THE ORDER IS ONE GAME SLOT'S USAGE. Withheld when the rows
+                come from non-duel battles, which have no G1/G2/G3. */}
+            {hasSlots && (
+              <Tabs
+                label="Order pairs by game"
+                size="sm"
+                value={slotSort}
+                onChange={setSlotSort}
+                className={styles.slotSwitch}
+                items={SLOT_IDS.map((id, i) => ({
+                  id,
+                  label: SLOT_NAMES[i],
+                  title: `Most used in ${SLOT_NAMES[i]} first`,
+                }))}
+              />
+            )}
             {/* A legend is always present: identity is never colour alone. */}
             <div className={styles.legend}>
               <span className={styles.legendItem}>

@@ -57,6 +57,18 @@ export type DuelFeedDayPreset = (typeof DUEL_FEED_DAY_PRESETS)[number];
 
 export const DUEL_FEED_DEFAULT_DAYS: DuelFeedDayPreset = 30;
 
+/**
+ * DUEL ANALYSIS' WINDOWS (2026-11-09). Asked for by name: "7D, 15D, 28D, 45D,
+ * 60D". 28, not 30: four whole weeks. Shown as chips on the screen itself
+ * rather than inside a date menu. The server clamps `days` to 1..4000, so 28
+ * needs no server change.
+ */
+export const DUEL_ANALYSIS_DAY_PRESETS = [7, 15, 28, 45, 60] as const;
+
+export type DuelAnalysisDayPreset = (typeof DUEL_ANALYSIS_DAY_PRESETS)[number];
+
+export const DUEL_ANALYSIS_DEFAULT_DAYS: DuelAnalysisDayPreset = 28;
+
 /** "Last 15 Days" — the long form the analytics screens' menus print. */
 export function dayLabel(days: number): string {
   return `Last ${days} Days`;

@@ -268,55 +268,57 @@
   gap: 0.6rem;
 }
 
-/* ----------------------------------------------------------- range picker */
+/* ------------------------------------------------------------ day chips */
 
-.rangeWrap {
-  position: relative;
-}
-
-.rangeButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 0.85rem;
-  border-radius: 11px;
-  border: 1px solid var(--border);
-  background: var(--surface-nested);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.rangePop {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 60;
-  width: 320px;
-  padding: 0.9rem;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: var(--surface-strong, var(--surface));
-  box-shadow: var(--shadow-float);
-}
-
-.rangePopLabel {
-  display: block;
-  margin-bottom: 0.45rem;
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.rangePresets {
+.dayChips {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.35rem;
-  margin-bottom: 0.9rem;
 }
+
+.dayChips .rangeChip {
+  min-width: 2.6rem;
+  padding: 0.42rem 0.6rem;
+  font-weight: 700;
+}
+
+.dayRange {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.slotSwitch {
+  margin-right: auto;
+  margin-left: 0.75rem;
+}
+
+@media (pointer: coarse) {
+  .dayChips .rangeChip {
+    min-height: 2.5rem;
+  }
+}
+
+/* On a phone the five chips take their own row under the title rather than
+   squeezing it into a narrow column beside them. */
+@media (max-width: 640px) {
+  .head {
+    flex-wrap: wrap;
+  }
+
+  .headTools {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+/* ------------------------------------------------------- the day chips */
 
 .rangeChip {
   padding: 0.34rem 0.6rem;
@@ -348,55 +350,6 @@
   border-color: var(--accent-select-edge);
   color: var(--accent-select);
   opacity: 1;
-}
-
-.rangeDates {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-}
-
-.rangeField {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.rangeField input {
-  padding: 0.38rem 0.45rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-sunken);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.8rem;
-}
-
-.rangeApply {
-  composes: cta from '../../styles/cta.module.css';
-  grid-column: 1 / -1;
-  padding: 0.45rem;
-  border-radius: 9px;
-  border: 1px solid transparent;
-  background: var(--accent-action-solid);
-  color: var(--accent-action-text);
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.rangeApply:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.rangeNote {
-  margin: 0.7rem 0 0;
-  font-size: 0.72rem;
-  color: var(--text-muted);
 }
 
 /* ----------------------------------------------------------------- tiles */

@@ -105,8 +105,8 @@ export const RANGE_PRESETS: readonly { label: string; days: number }[] = [
  * `preset` is a day count, with two sentinels: 0 = every stored day, -1 = the
  * custom from/to fields.
  */
-export function useDateWindow(season: Season, coverageEnd: string | null) {
-  const [preset, setPreset] = useState<number>(30);
+export function useDateWindow(season: Season, coverageEnd: string | null, initial = 30) {
+  const [preset, setPreset] = useState<number>(initial);
   const [custom, setCustom] = useState<{ from: string; to: string }>({ from: '', to: '' });
 
   // Picking a season sets an explicit month; picking a preset afterwards takes
