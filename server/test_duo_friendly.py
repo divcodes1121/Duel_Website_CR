@@ -1,20 +1,21 @@
-"""test_duo_friendly.py — the clan friendly 2v2 board.
+"""test_duo_friendly.py — the top players' 2v2 board.
 
     python server/test_duo_friendly.py
 
 Real SQLite files in a temp directory, payloads shaped like the real
 `battle_raw` rows (ranked 2v2 is `type: "trail"`, clan friendly is
 `type: "clanMate2v2"`, BOTH under game mode `TeamVsTeam` — measured on the live
-database 2026-11-08). What is worth testing:
+database 2026-11-08). The live board is never read: `get` is a fake. What is
+worth testing:
 
-  * a ranked 2v2 battle must never reach the friendly board, though its mode
-    string is identical;
+  * a side is recorded only when one of ITS two players is a top player — the
+    opponents being top players does not make this side's decks theirs;
+  * an empty top set records nothing (never "everyone");
+  * a failed read of the live board keeps the last top set;
+  * ranked and clan friendly both count; events and drafts never do;
   * one real battle stored under several tracked players is ONE game;
   * the board is the top N per win condition, a pair filed under each of its
-    decks' win conditions;
-  * sides older than the window leave the board;
-  * the fold records friendly sides itself, so the hourly job needs no second
-    read of `battle_raw`.
+    decks' win conditions; sides older than the window leave it.
 """
 
 from __future__ import annotations
@@ -104,7 +105,7 @@ def stamp(days_ago, minute=0):
 
 class Fixture:
     def __init__(self, rows):
-        self.dir = tempfile.mkdtemp(prefix="duo-friendly-")
+        self.dir = tempfile.mkdtemp(prefix="duo-top-")
         self.src = os.path.join(self.dir, "battles.db")
         self.col = os.path.join(self.dir, "pairs.db")
         con = sqlite3.connect(self.src)
@@ -132,22 +133,65 @@ class Fixture:
         dp._MODES_CACHE = None
         return False
 
+    def set_top(self, tags):
+        dp._ensure()
+        con = dp._connect()
+        try:
+            out = df.set_top(con, set(tags), {"board": len(tags), "crl": 0})
+            con.commit()
+            return out
+        finally:
+            con.close()
+
+    def sides(self, where="1"):
+        con = sqlite3.connect(dp.DB_PATH)
+        try:
+            return con.execute("SELECT kind, tags FROM df_side WHERE " + where).fetchall()
+        finally:
+            con.close()
+
+
+def fake_board(tags, status=200):
+    """A `recruit._get` stand-in serving one page of the live board."""
+    def get(path, **params):
+        if status != 200:
+            return status, None
+        return 200, {"items": [{"tag": t.lstrip("#")} for t in tags], "paging": {}}
+    return get
+
 
 # --------------------------------------------------------------------------
-print("\nis_clan_friendly")
-check("clanMate2v2 on TeamVsTeam is friendly",
-      df.is_clan_friendly(payload("x", [], []), "TeamVsTeam"))
-check("ranked 2v2 (trail) is not, though the mode string is identical",
-      not df.is_clan_friendly(payload("x", [], [], kind="trail"), "TeamVsTeam"))
+print("\nkind_of")
+check("clanMate2v2 is friendly", df.kind_of(payload("x", [], [])) == "friendly")
+check("trail is ranked", df.kind_of(payload("x", [], [], kind="trail")) == "ranked")
 check("the type is read case-insensitively",
-      df.is_clan_friendly({"type": "CLANMATE2V2"}, "TeamVsTeam"))
-check("a draft clan 2v2 is not own decks",
-      not df.is_clan_friendly(payload("x", [], [], mode="TeamVsTeam_PickMode"),
-                              "TeamVsTeam_PickMode"))
-check("an event-deck clan 2v2 is not own decks",
-      not df.is_clan_friendly(payload("x", [], []), "TeamVsTeam_EventDeck"))
-check("the payload's own mode is used when none is passed",
-      not df.is_clan_friendly(payload("x", [], [], mode="Royale_Shuffle_2v2".replace("Royale", "RR"))))
+      df.kind_of({"type": "CLANMATE2V2"}, "TeamVsTeam") == "friendly")
+check("another battle type is neither", df.kind_of(payload("x", [], [], kind="challenge")) is None)
+check("a draft 2v2 is not own decks",
+      df.kind_of(payload("x", [], [], kind="trail", mode="TeamVsTeam_PickMode")) is None)
+check("an event-deck 2v2 is not own decks",
+      df.kind_of(payload("x", [], []), "TeamVsTeam_EventDeck") is None)
+check("Royale Shuffle 2v2 is not own decks",
+      df.kind_of(payload("x", [], [], mode="RR_TeamVsTeam")) is None)
+
+# --------------------------------------------------------------------------
+print("\nsides_for and the top set")
+pairs = [("team", "a", "b", HOG, GIANT, ["#AA", "#BB"], "p1"),
+         ("opponent", "c", "d", BAIT, LAVA, ["#CC", "#DD"], "p2")]
+kept = df.sides_for({}, "bid", "t", pairs, "ranked", {"#AA"})
+check("only the side holding a top player is kept", [r[1] for r in kept] == ["team"], str(kept))
+check("the row carries its kind", kept[0][-1] == "ranked")
+check("an empty top set keeps nothing", df.sides_for({}, "bid", "t", pairs, "ranked", set()) == [])
+check("no top filter keeps both sides", len(df.sides_for({}, "bid", "t", pairs)) == 2)
+check("a tag without # still matches",
+      len(df.sides_for({}, "b", "t", [pairs[1][:5] + (["CC", "#XX"], "p2")],
+                       "ranked", {"#CC"})) == 1)
+
+got, info = df.fetch_top(get=fake_board(["#AA", "BB"]), cohorts={"crl": ["cc"]})
+check("top = live board + CRL, tags normalised", got == {"#AA", "#BB", "#CC"}, str(got))
+check("fetch reports both parts", info == {"board": 2, "crl": 1}, str(info))
+_, bad = df.fetch_top(get=fake_board([], status=503), cohorts={})
+check("a failed board read reports zero", bad["board"] == 0)
 
 # --------------------------------------------------------------------------
 print("\nbuild_board (pure)")
@@ -158,7 +202,6 @@ def side(fp, bt, a, b, tags=("#A", "#B")):
 
 
 rows = []
-# Hog+Giant played 3 times, Hog+Bait twice, Hog+Lava once (newest), Giant+Giant once.
 for i in range(3):
     rows.append(side("hg", stamp(1, i), HOG, GIANT, ("#A", "#B" if i else "#C")))
 for i in range(2):
@@ -169,8 +212,8 @@ board = df.build_board(rows, dr.win_conditions, per=2)
 by = {}
 for wc, fp, rank, games, players, first, last, *_ in board:
     by.setdefault(wc, []).append((rank, fp, games, players))
-check("hog bucket keeps the top 2 by games", [f for _, f, _, _ in sorted(by.get("hog", []))] == ["hg", "hb"],
-      str(by.get("hog")))
+check("hog bucket keeps the top 2 by games",
+      [f for _, f, _, _ in sorted(by.get("hog", []))] == ["hg", "hb"], str(by.get("hog")))
 check("games counted per pair", dict((f, g) for _, f, g, _ in by["hog"]) == {"hg": 3, "hb": 2})
 check("distinct players counted across sides", dict((f, p) for _, f, _, p in by["hog"])["hg"] == 3)
 check("a pair is filed under each deck's win condition",
@@ -184,75 +227,86 @@ check("a tie in games goes to the newer last battle",
       [r[1] for r in tie if r[0] == "hog"] == ["zzz"], str(tie))
 
 # --------------------------------------------------------------------------
-print("\nthe fold records friendly sides, and only friendly ones")
+print("\nthe fold records top players' sides, ranked and friendly")
 
+# #AA and #GG are top players; nobody else is.
 FRIENDLY = payload(stamp(1), [("#AA", HOG), ("#BB", GIANT)], [("#CC", BAIT), ("#DD", LAVA)])
-# The same battle as the other teammate stored it.
 FRIENDLY_COPY = payload(stamp(1), [("#BB", GIANT), ("#AA", HOG)], [("#DD", LAVA), ("#CC", BAIT)])
 FRIENDLY_2 = payload(stamp(2), [("#AA", HOG), ("#BB", GIANT)], [("#EE", MINER), ("#FF", GOLEM)])
-RANKED = payload(stamp(1, 5), [("#GG", BAIT), ("#HH", MINER)], [("#II", GIANT), ("#JJ", LAVA)],
-                 kind="trail")
-OLD = payload(stamp(40), [("#KK", BAIT), ("#LL", GOLEM)], [("#MM", HOG), ("#NN", MINER)])
+RANKED_TOP = payload(stamp(1, 5), [("#ZZ", MINER), ("#GG", GOLEM)], [("#II", HOG), ("#JJ", LAVA)],
+                     kind="trail")
+RANKED_NOBODY = payload(stamp(1, 9), [("#KK", BAIT), ("#LL", MINER)], [("#MM", GIANT), ("#NN", LAVA)],
+                        kind="trail")
+EVENT = payload(stamp(1, 11), [("#AA", BAIT), ("#BB", GOLEM)], [("#QQ", HOG), ("#RR", MINER)],
+                kind="challenge")
+OLD = payload(stamp(40), [("#AA", BAIT), ("#BB", GOLEM)], [("#MM", HOG), ("#NN", MINER)])
 
 with Fixture([("#AA", FRIENDLY), ("#BB", FRIENDLY_COPY), ("#AA", FRIENDLY_2),
-              ("#GG", RANKED), ("#KK", OLD)]) as fx:
+              ("#GG", RANKED_TOP), ("#KK", RANKED_NOBODY), ("#AA", EVENT),
+              ("#AA", OLD)]) as fx:
+    fx.set_top({"#AA", "#GG"})
     dp.migrate(enrol=False)
-    con = sqlite3.connect(dp.DB_PATH)
-    n_sides = con.execute("SELECT COUNT(*) FROM df_side").fetchone()[0]
-    n_battles = con.execute("SELECT COUNT(DISTINCT battle_id) FROM df_side").fetchone()[0]
-    ranked_tags = con.execute("SELECT COUNT(*) FROM df_side WHERE tags LIKE '%#GG%'").fetchone()[0]
-    con.close()
-    check("3 friendly battles -> 6 sides (the stored copy adds nothing)", n_sides == 6, str(n_sides))
-    check("3 distinct friendly battles", n_battles == 3, str(n_battles))
-    check("the ranked battle is not recorded", ranked_tags == 0)
+    allsides = fx.sides()
+    check("4 sides: three #AA friendlies (one is old) + one #GG ranked", len(allsides) == 4,
+          str(allsides))
+    check("no side without a top player was recorded",
+          all(("#AA" in t) or ("#GG" in t) for _, t in allsides), str(allsides))
+    check("the opponents of a top player are not recorded",
+          not fx.sides("tags LIKE '%#CC%' OR tags LIKE '%#II%'"))
+    check("the ranked top-player side is recorded as ranked",
+          [k for k, t in allsides if "#GG" in t] == ["ranked"])
+    check("a ranked battle with no top player is not recorded",
+          not fx.sides("tags LIKE '%#KK%'"))
+    check("the event battle is not recorded", not fx.sides("tags LIKE '%#QQ%'") and
+          len([1 for _, t in allsides if "#AA" in t]) == 3)
 
-    res = df.refresh(now=NOW)
-    check("refresh drops the side older than 30 days", res["dropped"] == 2, str(res))
+    res = df.refresh(now=NOW, fetch=False)
+    check("refresh drops the side older than 30 days", res["dropped"] == 1, str(res))
+    check("refresh counts battles by kind", res["byKind"] == {"friendly": 2, "ranked": 1}, str(res))
     rep = df.report(per=50)
-    pairs = {(tuple(sorted(p["deckA"]["cardKeys"])), tuple(sorted(p["deckB"]["cardKeys"]))): p
-             for p in rep["pairs"]}
     hg = [p for p in rep["pairs"] if set(p["deckA"]["cardKeys"]) | set(p["deckB"]["cardKeys"])
           == set(HOG) | set(GIANT)]
-    check("Hog + Giant counted twice (two real battles)", len(hg) == 1 and hg[0]["occurrences"] == 2,
-          str([p["occurrences"] for p in hg]))
-    check("the board lists each pair once with no win condition chosen",
-          len(rep["pairs"]) == len({p["pairFingerprint"] for p in rep["pairs"]}))
-    ranked_sets = [set(BAIT) | set(MINER), set(GIANT) | set(LAVA)]
-    check("neither ranked pair is on the board",
-          not any(set(p["deckA"]["cardKeys"]) | set(p["deckB"]["cardKeys"]) in ranked_sets
-                  for p in rep["pairs"]))
-    check("report says friendly", rep["kind"] == "friendly" and rep["summary"]["mode"] == "clanMate2v2")
+    check("Hog + Giant counted twice (two real battles, one stored twice)",
+          len(hg) == 1 and hg[0]["occurrences"] == 2, str([p["occurrences"] for p in hg]))
+    check("two pairs on the board", rep["total"] == 2, str(rep["total"]))
+    check("report says top", rep["kind"] == "top" and rep["summary"]["mode"] == "top-2v2")
+    check("summary splits ranked and friendly battles",
+          rep["summary"]["battlesRanked"] == 1 and rep["summary"]["battlesFriendly"] == 2,
+          str(rep["summary"]))
     check("rows come seated with eight cards a deck",
           all(len(p["deckA"]["cards"]) == 8 and len(p["deckB"]["cards"]) == 8 for p in rep["pairs"]))
 
-    lava = df.report(win_condition="lava", per=50)
+    golem = df.report(win_condition="golem", per=50)
     check("a win condition narrows to its own bucket",
-          lava["total"] >= 1 and all("lava-hound" in p["deckA"]["cardKeys"] + p["deckB"]["cardKeys"]
-                                     for p in lava["pairs"]), str(lava["total"]))
+          golem["total"] == 1 and "golem" in golem["pairs"][0]["deckA"]["cardKeys"] +
+          golem["pairs"][0]["deckB"]["cardKeys"], str(golem["total"]))
     check("chips list every win condition with its count",
           {w["key"] for w in rep["winConditions"]} == set(dr.all_win_conditions())
-          and next(w for w in rep["winConditions"] if w["key"] == "lava")["pairs"] == lava["total"])
+          and next(w for w in rep["winConditions"] if w["key"] == "golem")["pairs"] == 1)
     check("'other' is the last chip", rep["winConditions"][-1]["key"] == "other")
     check("an unknown win condition falls back to all",
           df.report(win_condition="'; DROP TABLE df_board--")["winCondition"] == "")
     check("an unknown sort falls back to played", df.report(sort="x")["sort"] == "played")
-
     cards = df.report(cards=["golem"], per=50)
     check("the card filter keeps only pairs with Golem in one deck",
-          cards["total"] >= 1 and all("golem" in p["deckA"]["cardKeys"] or
+          cards["total"] == 1 and all("golem" in p["deckA"]["cardKeys"] or
                                       "golem" in p["deckB"]["cardKeys"] for p in cards["pairs"]))
-    giant = df.report(cards=["giant"], per=50)
-    check("'giant' is the Giant, not every giant",
-          all("giant" in p["deckA"]["cardKeys"] or "giant" in p["deckB"]["cardKeys"]
-              for p in giant["pairs"]))
-    check("a second refresh is stable", df.refresh(now=NOW)["boardRows"] == res["boardRows"])
 
-    # A second update reads nothing new and records nothing twice.
+    kept_top = df.refresh(now=NOW, get=fake_board([], status=503), cohorts={})
+    check("a failed board read keeps the last top set",
+          kept_top["top"]["kept"] and kept_top["top"]["players"] == 2, str(kept_top["top"]))
+    swapped = df.refresh(now=NOW, get=fake_board(["#XX"]), cohorts={"crl": ["#YY"]})
+    check("a good read replaces the set", swapped["top"]["players"] == 2 and
+          not swapped["top"]["kept"], str(swapped["top"]))
+    check("the board keeps sides judged under the earlier set",
+          swapped["boardRows"] == res["boardRows"])
+
     dp.update()
-    con = sqlite3.connect(dp.DB_PATH)
-    again = con.execute("SELECT COUNT(*) FROM df_side").fetchone()[0]
-    con.close()
-    check("an incremental run adds nothing", again == 4, str(again))
+    check("an incremental run adds nothing", len(fx.sides()) == 3, str(len(fx.sides())))
+
+with Fixture([("#AA", FRIENDLY)]) as fx:
+    dp.migrate(enrol=False)
+    check("with no top set stored, nothing is recorded", fx.sides() == [])
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

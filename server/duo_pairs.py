@@ -677,9 +677,11 @@ def _stage(con, src, since: str | None) -> dict:
     # advance past it -- see the note where it is applied.
     blocked_at: str | None = None
     stage_rows, player_rows, battle_rows = [], [], []
-    # CLAN FRIENDLY 2v2 SIDES, recorded by `duo_friendly` in the same
+    # TOP PLAYERS' 2v2 SIDES (ranked and clan friendly, at least one teammate
+    # in the stored top set), recorded by `duo_friendly` in the same
     # transaction, so they share this read's cursor (and the raw purge's).
     friendly_rows = []
+    top_set = df.top_tags(con)
 
     while True:
         chunk = cur.fetchmany(_READ_BATCH)
@@ -707,7 +709,7 @@ def _stage(con, src, since: str | None) -> dict:
                 continue
             got = False
             retryable_before = _retryable(problems)
-            friendly = df.is_clan_friendly(payload, r["game_mode"] or "")
+            kind = df.kind_of(payload, r["game_mode"] or "") if top_set else None
             # Two sides are OFFERED by every 2v2 payload. Counting what was
             # offered as well as what was taken is what makes the shortfall
             # explainable rather than merely visible.
@@ -721,10 +723,11 @@ def _stage(con, src, since: str | None) -> dict:
                 got = True
                 sides_yielded += 1
                 touched.add(pair_fp)
-                if friendly:
+                if kind:
                     friendly_rows.extend(df.sides_for(
                         payload, bid, r["battle_time"] or "",
-                        [(side, fp_a, fp_b, deck_a, deck_b, side_tags, pair_fp)]))
+                        [(side, fp_a, fp_b, deck_a, deck_b, side_tags, pair_fp)],
+                        kind, top_set))
                 stage_rows.append((
                     bid, side, pair_fp, fp_a, fp_b,
                     json.dumps(deck_a), json.dumps(deck_b),

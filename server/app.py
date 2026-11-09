@@ -787,11 +787,13 @@ class Handler(BaseHTTPRequestHandler):
                 # unknown one is dropped, so nothing from the query string
                 # reaches the SQL except as a bound parameter.
                 cards = [c for c in (q.get("cards") or [""])[0].split(",") if c]
-                # `kind=friendly` IS THE CLAN FRIENDLY BOARD (2026-11-08): the
-                # 50 most-played pairs per win condition over 30 days, from
-                # `duo_friendly`. Without it, the old all-time board, so a
-                # page loaded before the deploy keeps working.
-                if (q.get("kind") or [""])[0] == "friendly":
+                # `kind=top` IS THE TOP PLAYERS' 2v2 BOARD (2026-11-09): the 50
+                # most-played pairs per win condition over 30 days, from
+                # ranked + clan friendly 2v2 with a Path of Legends top-1,000
+                # or CRL player in the pair (`duo_friendly`). `friendly` is the
+                # same board (the 2026-11-08 client asked for it by that name).
+                # Without `kind`, the old all-time board.
+                if (q.get("kind") or [""])[0] in ("top", "friendly"):
                     return self._send(
                         duo_friendly.report(
                             page=page, per=per, cards=cards,

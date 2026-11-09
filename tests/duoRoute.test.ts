@@ -165,12 +165,12 @@ describe('the page itself', () => {
     expect(page).not.toMatch(/deckA[\s\S]{0,200}\bVS\b[\s\S]{0,200}deckB/);
   });
 
-  it('asks for the clan friendly board and says what it is', () => {
-    /* 2026-11-08: the screen shows CLAN FRIENDLY 2v2 only, the 50 most-played
-       pairs per win condition over a rolling window. Ranked and friendly 2v2
-       share one mode string (`TeamVsTeam`); the server tells them apart. */
-    expect(client).toContain("kind: 'friendly'");
-    expect(page).toContain('Clan friendly 2v2');
+  it("asks for the top players' board and says what it is", () => {
+    /* 2026-11-09: the screen shows TOP PLAYERS' 2v2 only (ranked + clan
+       friendly with a Path of Legends top-1,000 or CRL player in the pair),
+       the 50 most-played pairs per win condition over a rolling window. */
+    expect(client).toContain("kind: 'top'");
+    expect(page).toContain("Top players' 2v2");
     expect(page).toContain('perWinCondition');
     expect(page).toContain('windowDays');
   });

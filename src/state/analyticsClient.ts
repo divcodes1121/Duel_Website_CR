@@ -3276,10 +3276,12 @@ export interface DuoReport {
   cards?: string[];
   /** The closed vocabulary of orderings the server will accept. */
   sorts: string[];
-  /** `friendly` = the clan friendly board (`server/duo_friendly.py`, asked
-   *  for 2026-11-08): the most-played pairs per win condition over a rolling
-   *  window. Absent on the old all-time ranked board. */
-  kind?: 'friendly';
+  /** `top` = the top players' board (`server/duo_friendly.py`, 2026-11-09):
+   *  ranked + clan friendly 2v2 with a Path of Legends top-1,000 or CRL
+   *  player in the pair, the most-played pairs per win condition over a
+   *  rolling window. `friendly` = the same board under its first name.
+   *  Absent on the old all-time board. */
+  kind?: 'top' | 'friendly';
   /** The win condition this page is narrowed to, as the server accepted it
    *  ('' = every win condition's top pairs together). */
   winCondition?: string;
@@ -3295,8 +3297,15 @@ export interface DuoReport {
     uniquePairs: number;
     occurrences?: number;
     battlesFolded?: number;
-    /** Friendly board: distinct battles inside the window. */
+    /** Top players' board: distinct battles inside the window, and split. */
     battles?: number;
+    battlesRanked?: number;
+    battlesFriendly?: number;
+    /** How many players count as top: the live board's size, the CRL list's,
+     *  and the two together. */
+    topBoard?: number;
+    topCrl?: number;
+    topPlayers?: number;
     /** Friendly board: when recording started — the window is shorter than
      *  `windowDays` until then. */
     collectingSince?: string;
@@ -3348,10 +3357,12 @@ export interface DuoReport {
 export function fetchDuoPairs(
   page = 1, per = 25, cards: readonly string[] = [], sort = 'played', winCondition = '',
 ): Promise<DuoReport> {
-  /* `kind=friendly`: the 2v2 screen shows CLAN FRIENDLY 2v2 only (asked for
-     2026-11-08). The old all-time board still answers without it. */
+  /* `kind=top`: the 2v2 screen shows TOP PLAYERS' 2v2 only (asked for
+     2026-11-09) — ranked and clan friendly 2v2 with a Path of Legends
+     top-1,000 or CRL player in the pair. The old all-time board still answers
+     without it. */
   const q = new URLSearchParams({
-    kind: 'friendly', page: String(page), per: String(per), sort,
+    kind: 'top', page: String(page), per: String(per), sort,
   });
   if (cards.length) q.set('cards', cards.join(','));
   if (winCondition) q.set('wc', winCondition);

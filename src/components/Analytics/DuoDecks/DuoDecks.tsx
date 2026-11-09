@@ -216,13 +216,14 @@ export function DuoDecks() {
         <h1 className={styles.title}>2v2 Decks</h1>
         {exportButton}
         <p className={styles.lede}>
-          Clan friendly 2v2: the {report?.perWinCondition ?? 50} most-played
-          teammate deck pairs for each win condition, last{' '}
+          Top players' 2v2: the {report?.perWinCondition ?? 50} most-played
+          teammate deck pairs for each win condition, from ranked and clan
+          friendly 2v2 with a top 1,000 ranked or CRL player in the pair, last{' '}
           {report?.windowDays ?? 30} days.
         </p>
         {summary?.built && (
           <span className={styles.population}>
-            {(summary.battles ?? 0).toLocaleString()} clan friendly battles
+            {(summary.battles ?? 0).toLocaleString()} top player battles
             {summary.firstSeen && <> · since {shortDay(summary.firstSeen)}</>}
           </span>
         )}
@@ -314,7 +315,7 @@ export function DuoDecks() {
 
       {summary && !summary.built && !error && (
         <p className={styles.empty}>
-          Collecting clan friendly 2v2 battles — the board fills as they are
+          Collecting top players' 2v2 battles — the board fills as they are
           played.
         </p>
       )}
@@ -331,7 +332,7 @@ export function DuoDecks() {
           rather than as using a control. */}
       {loading && !report && (
         <ReadingState k="duo-pairs" hue="green">
-          Reading clan friendly 2v2 pairs…
+          Reading top players' 2v2 pairs…
         </ReadingState>
       )}
 
@@ -357,7 +358,7 @@ export function DuoDecks() {
                 <p className={styles.empty}>
                   {report.cards?.length
                     ? 'No pair runs all of those cards in one deck.'
-                    : 'No clan friendly 2v2 pairs here yet.'}
+                    : 'No top player pairs here yet.'}
                 </p>
               )}
             </div>

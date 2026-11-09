@@ -545,7 +545,7 @@ export function duoPairsDoc(r: DuoReport): ReportDoc {
         kind: 'stats',
         tiles: [
           { label: 'Unique pairs', value: int(r.total), note: r.cards?.length ? 'matching the card filter' : 'teammate partnerships' },
-          { label: 'Battles', value: int(s.battles ?? s.battlesFolded ?? 0), note: r.windowDays ? `clan friendly 2v2, last ${r.windowDays} days` : 'real 2v2 battles' },
+          { label: 'Battles', value: int(s.battles ?? s.battlesFolded ?? 0), note: r.windowDays ? `top players' 2v2, last ${r.windowDays} days` : 'real 2v2 battles' },
           { label: 'On this page', value: int(r.pairs.length), note: `page ${r.page} of ${r.pages}` },
         ],
       },

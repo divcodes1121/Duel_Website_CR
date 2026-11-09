@@ -529,6 +529,15 @@ the same battle is stored two or four times. `battle_identity` is built from the
 battle's own timestamp and its four sorted tags, and `duo_stage`'s
 `PRIMARY KEY (battle_id, side)` enforces the dedup rather than hoping.
 
+### The top players' board (`duo_friendly.py`, 2026-11-09)
+
+Since 2026-11-09 the board holds ranked AND clan friendly 2v2, but only sides
+where one of the two teammates is a top player: the live Path of Legends top
+1,000 (`top_decks.live_board`, re-read by `--refresh` every hour, the last set
+kept when the read fails) plus the CRL group. The set lives in `df_top`; a side
+is judged once, when the fold records it. `kind=top` on the route (`friendly`
+is the same board). `--reset` empties `df_side`/`df_board`.
+
 ### The clan friendly board (`duo_friendly.py`, 2026-11-08)
 
 Ranked and clan friendly 2v2 share the mode `TeamVsTeam`; the payload `type`

@@ -16843,6 +16843,39 @@ redeployed yet", and the two halves of this project ship separately.
 
 ---
 
+## 2v2 Decks is top players' 2v2: 50 pairs per win condition (2026-11-09)
+
+Asked the day after the clan friendly board shipped: "the 2v2 decks right now
+are useless and not that good, I want just top players' 2v2 decks".
+
+**Measured first (3 days of stored 2v2, read-only):** a 2v2 battle says nothing
+about how good its players are — league is always 1, global rank is empty, and
+trophies appear on 25 of 134,000 players. So a top player comes from outside
+2v2: the **live Path of Legends top 1,000** (`top_decks.live_board`, re-read
+every hour) plus the **CRL list** (`.duel_cohorts.json`), 1,347 players. They
+play little clan friendly 2v2 (180 of ~2,060 sides in 3 days, nearly every
+pair once) and a lot of ranked 2v2 (758 sides, the same duo up to 23 times).
+**The account holder chose ranked + clan friendly** over friendly only.
+
+**What changed in `server/duo_friendly.py`:** a side is recorded only when at
+least one of its two teammates is in the top set at that hour
+(`sides_for(..., top)`, `kind` ranked / friendly per side; an empty set records
+nothing). `refresh` re-reads the board first and keeps the last set when the
+read fails. `kind_of` admits `trail` (ranked) and `clanMate2v2`; drafts, event
+decks and Royale Shuffle stay out. Route `duo-pairs?kind=top` (`friendly` is
+the same board). The screen's lede and count line say "top players' 2v2".
+
+**Staged on the real data before deploy:** 733 top-player battles in the ~3
+days still stored (581 ranked, 152 friendly), 423 pairs, 15 of 17 win
+conditions with 10-50 pairs (Three Musketeers 2, X-Bow 10). The leaders are
+real repeated duos (a Hog cycle + Miner bait pair 33 games, a Golem pair 19).
+About a third of the rows rest on one game today; that thins as the 30-day
+window fills.
+
+Tests: `test_duo_friendly.py` 46 (a side holding a top player is kept, its
+opponents are not; empty set = nothing; failed board read keeps the set;
+ranked and friendly both count, events never); faults planted and caught.
+
 ## 2v2 Decks is clan friendly 2v2: 50 pairs per win condition (2026-11-08)
 
 Asked: "the decks are not updated and useless, ranked decks only are there — we
