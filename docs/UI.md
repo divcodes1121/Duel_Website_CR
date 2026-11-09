@@ -2276,6 +2276,27 @@ in `utils/bringAgainst.ts` (type imports only), `tests/bringAgainst.test.ts`.
   these rows. Numbers and names only — the no-prose rule of this screen.
 - The PDF prints the same three things (`teamReport.ts`).
 
+## 2v2 Decks: a chip per win condition (2026-11-08, top players since 2026-11-09)
+
+- The screen shows ONE board: top players' ranked + clan friendly 2v2, the 50 most-played pairs per
+  win condition over 30 days. The lede says that in one sentence and the pill under it counts the
+  battles and the first day held (`729 top player battles · since 11 Oct`).
+- **One chip per win condition** above the card filter: card art (none for Mixed), the label and how
+  many pairs its list holds. `All` first, `Mixed` last; a chip with 0 pairs is disabled, not hidden, so
+  the row never changes shape. Picked = `--solid-violet` with `--on-solid`. Chips wrap on a phone;
+  a coarse pointer gets 2.5rem targets.
+- The row is still the two decks and nothing else — no games count, no players. Rank is the order.
+
+## Duel Analysis: day chips and the G1 / G2 / G3 order (2026-11-09)
+
+- **The window is five chips in the header** (7D / 15D / 28D / 45D / 60D, opening on 28D), not a date
+  button with a menu. The dates follow the chips with the calendar glyph. A chip past the player's
+  stored days keeps a dashed edge and says how many are stored in its `title`. A season picked in the
+  shell lights no chip; the dates say which month. Below 640px the chips take their own row.
+- **The table is ordered by one game's usage**, G1 by default, switched by a small `Tabs` strip
+  (G1 / G2 / G3) beside the table title. The rank numbers follow the order. Not drawn when the rows
+  come from non-duel battles, which have no slots. The PDF export keeps the server's order.
+
 ## Working on this
 
 ```bash

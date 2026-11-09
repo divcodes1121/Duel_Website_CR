@@ -177,6 +177,16 @@ for a tag.
 | Evolution Giant + Evolution Mirror (Season 89): flags, art, the card manual's #042 / #099 and its balance log, seating fixture re-run; Giant joins the Wild picker's both-forms set | `41dfd19`; README "November 2026: Evolution Giant and Evolution Mirror" |
 | Team Analysis: ten opponent decks with ranked / ladder / friendly / duel games each, % of games beside "likely to bring", at most two builds of a win condition, card cap on the top ten, usage weight, "Against what they play most". Replayed out of time on 160 opponents before shipping | `57ff466`, `6440668`; README "Ten of their decks, and suggestions that vary" |
 
+## Shipped 2026-11-08 and 2026-11-09 (all live)
+
+| What | Where |
+|---|---|
+| 2v2 Decks: clan friendly 2v2 only, 50 pairs per win condition over 30 days, a chip per win condition (ranked and friendly share `TeamVsTeam`; `type` tells them apart) | `b6e211f`; README "2v2 Decks is clan friendly 2v2" |
+| 2v2 Decks: top players' 2v2 — live Path of Legends top 1,000 + CRL, ranked + clan friendly, side kept when one teammate is top | `d821ac9`; README "2v2 Decks is top players' 2v2" |
+| Duel Analysis: 7D / 15D / 28D / 45D / 60D chips, table ordered by G1 / G2 / G3 usage | `743d679`; README "Duel Analysis: day chips and a G1 / G2 / G3 order" |
+
+Open from these: the first hourly 2v2 run under the new rule was not watched (`grep boardRows /var/log/clashbot/duo.log`); the 2v2 window fills from 2026-11-08 (raw 2v2 is purged a day or two behind the fold, so there was nothing older); the Duel Analysis PDF still lists pairs in the server's order.
+
 ## Decisions waiting on the account holder
 
 1. **The R3 prediction sampler STOPPED on 2026-09-19 21:05 UTC** (its own stop
