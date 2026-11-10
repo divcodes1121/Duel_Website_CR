@@ -2152,16 +2152,20 @@ try:
     check("a list fewer than TOP_MIN_PLAYERS (two since 7.2) used is not in, however much one played it",
           _k(TP2) not in kt and ta.TOP_MIN_PLAYERS == 2)
     check("...nor one three used for fewer than thirty games", _k(TP3) not in kt and ta.TOP_MIN_GAMES == 30)
-    check("a top list is labelled top and carries its use; one the CRL group brought too keeps both",
+    check("a top list is labelled top; one the CRL group brought too is a CRL duel list, keeping both records",
           kt[_k(TP1)].origin == "top" and kt[_k(TP1)].top == [40, 900, 480]
-          and kt[_k(CR1)].origin == "top" and kt[_k(CR1)].crl == [5, 3, 2], str(kt[_k(CR1)].origin))
+          and kt[_k(CR1)].origin == "crl" and kt[_k(CR1)].crl == [5, 3, 2], str(kt[_k(CR1)].origin))
     check("the most used lead the pool", pt[0].key == _k(TP1), pt[0].key)
     check("the pool says how many top lists it holds", it["topLists"] == 3 and it["top"]["season"] == "live",
           str(ta._pool_public(it)))
-    check("the frequency bonus: half a point a doubling of its users, at most three",
-          ta.use_bonus(kt[_k(TP1)]) == round(0.5 * __import__("math").log2(41), 2)
-          and ta.use_bonus(types.SimpleNamespace(top=[100000, 1, 1], crl=None)) == ta.TOP_USE_CAP == 3.0
-          and ta.use_bonus(types.SimpleNamespace(top=None, crl=[5, 3, 2])) == round(0.5 * __import__("math").log2(3), 2)
+    # 2026-11-10: CRL DUEL LISTS FIRST; a top 1,000 list earns nothing for
+    # being widely played (that is what makes it expected).
+    check("the choosing bonus: CRL_PREFER + half a point a doubling of CRL players; a top list none",
+          ta.CRL_PREFER == 5.0
+          and ta.use_bonus(kt[_k(TP1)]) == 0.0
+          and ta.use_bonus(types.SimpleNamespace(top=[100000, 1, 1], crl=None)) == 0.0
+          and ta.use_bonus(types.SimpleNamespace(top=None, crl=[5, 3, 2])) == round(5.0 + 0.5 * __import__("math").log2(3), 2)
+          and ta.use_bonus(types.SimpleNamespace(top=[40, 1, 1], crl=[5, 3, 2])) == round(5.0 + 0.5 * __import__("math").log2(3), 2)
           and ta.use_bonus(types.SimpleNamespace(top=None, crl=None)) == 0.0)
     ta._top = None
     ta._COMP_CACHE["by"] = {}

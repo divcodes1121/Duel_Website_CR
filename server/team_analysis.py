@@ -2189,18 +2189,30 @@ TOP_USE_WEIGHT = 0.5
 TOP_USE_CAP = 3.0
 
 
+#: CRL DUEL LISTS FIRST (2026-11-10): points in the choosing (never in the
+#: figure) for a list the CRL group brought to duels in the window. Asked: "focus
+#: on CRL duel decks more, I can still see top 1k lists more ... duel decks are
+#: not snipable and have a surprise factor, keeping top 1k in the list". The
+#: 6.1 frequency bonus for TOP 1,000 lists is gone with it: rewarding how many
+#: ranked players use a list rewards the lists an opponent expects. Staged on
+#: 10 real opponents (30 d, 7 d in brackets): CRL lists in the top tens 41% ->
+#: 57% (38 -> 48), in the top three 47% -> 77% (23 -> 43), #1 66.3 -> 65.4
+#: (63.6 -> 63.7), top ten 59.7 -> 59.6 (58.5 -> 58.3), rows beating every
+#: family 73 -> 76, most one list repeats 7 = 7. 2 / 3 / 8 points measured too:
+#: 8 bought 2 more points of CRL share for nothing else.
+CRL_PREFER = 5.0
+
+
 def use_bonus(card) -> float:
-    """`TOP_USE_WEIGHT * log2(1 + users)`, capped: users = the top players
-    with the list in the window, else the CRL players. 0 for anything else."""
+    """Points in the choosing: `CRL_PREFER` + `TOP_USE_WEIGHT * log2(1 + CRL
+    players)` for a list the CRL group brought to duels in the window, 0 for
+    anything else (a top 1,000 list included, since 2026-11-10)."""
     import math
-    top = getattr(card, "top", None)
     crl = getattr(card, "crl", None)
-    duel = getattr(card, "duelw", None)
-    users = max(top[0] if top else 0, crl[2] if crl and len(crl) > 2 else 0,
-                duel[2] if duel else 0)
-    if not users:
+    if not crl:
         return 0.0
-    return round(min(TOP_USE_CAP, TOP_USE_WEIGHT * math.log2(1 + users)), 2)
+    pilots = int(crl[2]) if len(crl) > 2 and crl[2] else 1
+    return round(CRL_PREFER + TOP_USE_WEIGHT * math.log2(1 + pilots), 2)
 
 _COMP_LOCK = threading.Lock()
 _COMP_BUILD = threading.Lock()
@@ -2466,7 +2478,10 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
             "cards": cards, "art": art, "inferredArt": inferred,
             "winCondition": arch, "name": cd.deck_title(arch, cards),
             "matches": 0, "wins": 0, "winRate": 0.0, "useRate": 0.0,
-            "origin": ("top" if e.get("top") else "crl" if e.get("crl")
+            # A list the CRL group brought to duels is a CRL duel list even when
+            # the top 1,000 play it too (2026-11-10: it was labelled "Top 1k
+            # list", and 41% of the top tens were CRL duel lists nobody saw as such).
+            "origin": ("crl" if e.get("crl") else "top" if e.get("top")
                        else "duel" if e.get("duel") else "meta")},
             None, prof)
         c.crl = e.get("crl")

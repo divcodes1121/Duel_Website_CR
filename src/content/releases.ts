@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-11-10-crl-duel-decks-first',
+    date: '2026-11-10',
+    kind: 'improved',
+    title: 'Team Analysis and Deck Counter: CRL duel decks first',
+    body: [
+      'Duel decks now come only from top CRL players, and they are preferred over the top 1,000 ranked lists: a duel list is harder for an opponent to expect. The top 1,000 lists stay in, and a deck is still only suggested if it wins.',
+      'A list that CRL players took to duels is labelled CRL duel list, even when ranked players use it too.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+    needs: 'trial',
+  },
+  {
     id: '2026-11-10-team-matchup-map',
     date: '2026-11-10',
     kind: 'new',
