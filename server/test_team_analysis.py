@@ -1539,6 +1539,32 @@ check("...every pool row that reached the list kept its worst case through the d
       all(d.get("worst") and d["worst"].get("name") and d["worst"]["rate"] == d["vs"][d["worst"]["family"]]
           for d in _bring["decks"]), str([d.get("worst") for d in _bring["decks"]][:2]))
 
+# THE MATCHUP MAP (2026-11-10): their lists, and each deck's rate against each.
+_tk = {t["key"] for t in _bring.get("threats") or []}
+check("bring() publishes their lists, each with a family and a likelihood",
+      _tk and all(t.get("family") and t.get("likelihood") is not None and len(t["cards"]) == 8
+                  for t in _bring["threats"]), str((_bring.get("threats") or [])[:1]))
+check("...and every deck's vsLists is keyed by those lists, [rate, source, games]",
+      all(d.get("vsLists") and set(d["vsLists"]) <= _tk
+          and all(len(v) == 3 and 0 <= v[0] <= 100 for v in d["vsLists"].values())
+          for d in _bring["decks"]), str([d.get("vsLists") for d in _bring["decks"]][:1]))
+
+
+def _fam_mean(d, fam):
+    num = den = 0.0
+    for t in _bring["threats"]:
+        v = d["vsLists"].get(t["key"])
+        if t["family"] == fam and v:
+            num += t["likelihood"] * v[0]
+            den += t["likelihood"]
+    return num / den if den else None
+
+
+check("...and a family's figure is the likelihood-weighted mean of its lists' rates",
+      all(abs(_fam_mean(d, f) - r) <= 0.11 for d in _bring["decks"] for f, r in (d.get("vs") or {}).items()
+          if _fam_mean(d, f) is not None),
+      str([(f, r, _fam_mean(d, f)) for d in _bring["decks"][:1] for f, r in (d.get("vs") or {}).items()]))
+
 # BOTH SCREENS ASK FOR THE BALANCE LOG; a context built by anything else does not.
 _asked = []
 _saved_fc = ta._FusionContext

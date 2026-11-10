@@ -850,6 +850,10 @@ export interface BringReport {
   window: { from: string | null; to: string | null };
   /** What they play, most played first — the families a deck's `vs` is read by. */
   plays: PlaysFamily[];
+  /** THEIR LISTS the figures were measured against, most likely first
+   *  (2026-11-10): the matchup map's left-hand side. Each deck's `vsLists` is
+   *  keyed by these. Absent from a server that predates it. */
+  threats?: TeamThreat[];
   /** The strongest counters to all of it, in the order of the figure printed. */
   decks: TeamRecommendation[];
   /** The best counters to each family they play. `rate` on a deck is its rate
@@ -2591,6 +2595,8 @@ export interface TeamThreat {
   evidence: ThreatEvidence;
   /** Share of the projected pool. The `threats` array sums to 1.0. */
   likelihood: number;
+  /** The family (`plays[].family`) this list belongs to, since brain 3.0. */
+  family?: string;
   /** Battles this deck was actually seen in. ZERO for anything generated. */
   observedCount: number;
   wins: number;
@@ -2766,6 +2772,11 @@ export interface TeamRecommendation {
    *  — on every row of both modes since brain 3.0. A family with no measured
    *  record is ABSENT, not 50. */
   vs?: Record<string, number>;
+  /** THE MATCHUP MAP'S EDGES (2026-11-10): this row's rate against each of
+   *  their lists (`threats[].key`), the rung of the evidence ladder it came
+   *  off, and the games behind it. A family's `vs` is the likelihood-weighted
+   *  mean of these. A list with no rate is absent. */
+  vsLists?: Record<string, [number, string | null, number]>;
   /** Families (`plays[].family`) this row is the list's best counter to, at
    *  55% or better. */
   answers?: string[];

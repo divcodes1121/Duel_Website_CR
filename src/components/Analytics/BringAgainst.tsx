@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type {
   BringCard,
   BringReport,
@@ -24,6 +24,8 @@ import {
   windowTitle,
   type BringView,
 } from '../../utils/bringAgainst';
+import { MatchupFlow } from './MatchupFlow/MatchupFlow';
+import { deckId, type FlowFocus } from '../../utils/matchupFlow';
 import styles from './BringAgainst.module.css';
 
 /**
@@ -92,10 +94,13 @@ function BringDeck({
   figure,
   figureTitle,
   skip,
+  onMap,
 }: {
   deck: TeamRecommendation;
   plays: PlaysFamily[];
   rank?: number;
+  /** Opens the matchup map centred on this deck. */
+  onMap?: () => void;
   /** The figure to lead with. Defaults to the rate against everything. */
   figure?: number;
   figureTitle?: string;
@@ -135,6 +140,18 @@ function BringDeck({
             log) is the figure's TOOLTIP, not a mark: staged on real players,
             two rows in three held a card the last patch touched, and a mark on
             most rows says nothing. A nerf is already in the figure. */}
+        {onMap && (
+          <button
+            type="button"
+            className={styles.mapButton}
+            onClick={onMap}
+            data-map-deck
+            title="Show this deck's matchups against everything they play"
+          >
+            <MapGlyph />
+            Matchups
+          </button>
+        )}
         <span
           className={styles.figure}
           title={
@@ -173,6 +190,18 @@ function BringDeck({
         <DeckActions cards={d.cards} name={deck.name} size="sm" className={styles.actions} art={d.art} />
       </div>
     </li>
+  );
+}
+
+/** Three nodes and two wires: the map's own mark. */
+function MapGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <rect x="2.5" y="9" width="5" height="6" rx="1.5" />
+      <rect x="16.5" y="3" width="5" height="6" rx="1.5" />
+      <rect x="16.5" y="15" width="5" height="6" rx="1.5" />
+      <path d="M7.5 12c4.5 0 4.5-6 9-6M7.5 12c4.5 0 4.5 6 9 6" />
+    </svg>
   );
 }
 
@@ -246,6 +275,16 @@ function ByCard({ view, plays }: { view: NonNullable<BringReport['byCard']>; pla
 
 export function BringAgainst({ bring }: { bring: BringReport }) {
   const [view, setView] = useState<BringView>('best');
+  /* THE MATCHUP MAP (2026-11-10): opened by a family on the strip or a deck's
+     Matchups button, centred on what was clicked. */
+  const [map, setMap] = useState<FlowFocus | null>(null);
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const openMap = (f: FlowFocus) => {
+    setMap(f);
+    requestAnimationFrame(() =>
+      mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
+    );
+  };
   const views = BRING_VIEWS.filter((v) => v.id !== 'card' || bring.byCard);
 
   if (bring.reason || bring.decks.length === 0) {
@@ -266,12 +305,46 @@ export function BringAgainst({ bring }: { bring: BringReport }) {
       <ul className={styles.plays} aria-label="Likely to bring">
         <li className={styles.playsLabel}>Likely to bring</li>
         {bring.plays.map((p) => (
-          <li key={p.family} className={styles.play} title={playsTitle(p)}>
-            <span>{p.name}</span>
-            <strong>{shareLabel(p.share)}</strong>
+          <li key={p.family}>
+            <button
+              type="button"
+              className={styles.play}
+              title={playsTitle(p)}
+              aria-pressed={map?.side === 'their' && map.id === p.family}
+              data-play={p.family}
+              onClick={() => openMap({ side: 'their', id: p.family })}
+            >
+              <span>{p.name}</span>
+              <strong>{shareLabel(p.share)}</strong>
+            </button>
           </li>
         ))}
+        {!map && (
+          <li>
+            <button
+              type="button"
+              className={styles.mapOpen}
+              onClick={() => openMap({ side: 'their', id: bring.plays[0]?.family ?? '' })}
+            >
+              <MapGlyph />
+              Matchup map
+            </button>
+          </li>
+        )}
       </ul>
+
+      {map && (
+        <div ref={mapRef}>
+          <MatchupFlow
+            plays={bring.plays}
+            threats={bring.threats}
+            decks={bring.decks}
+            focus={map}
+            onFocus={setMap}
+            onClose={() => setMap(null)}
+          />
+        </div>
+      )}
 
       <Tabs
         label="Bring this against them"
@@ -302,6 +375,7 @@ export function BringAgainst({ bring }: { bring: BringReport }) {
               deck={d}
               plays={bring.plays}
               rank={i + 1}
+              onMap={() => openMap({ side: 'ours', id: deckId(d) })}
               figureTitle="Expected win rate against the decks they are likely to bring, weighted by how likely each is."
             />
           ))}

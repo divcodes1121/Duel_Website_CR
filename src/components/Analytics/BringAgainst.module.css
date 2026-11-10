@@ -53,6 +53,57 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A family on the strip opens the matchup map centred on it (2026-11-10). */
+.plays > li:not(.playsLabel) {
+  display: contents;
+}
+
+button.play {
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: border-color var(--dur-1, 140ms) var(--ease, ease);
+}
+
+button.play:hover {
+  border-color: var(--hue-red);
+}
+
+button.play[aria-pressed='true'] {
+  border-color: var(--accent-select);
+  box-shadow: 0 0 0 1px var(--accent-select);
+}
+
+.mapOpen,
+.mapButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.14rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--accent-select) 60%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-select) 12%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mapOpen:hover,
+.mapButton:hover {
+  border-color: var(--accent-select);
+}
+
+.mapButton {
+  margin-left: auto;
+}
+
+.mapButton + .figure {
+  margin-left: 0;
+}
+
 .note {
   margin: 0;
   font-size: 0.76rem;

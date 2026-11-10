@@ -3386,6 +3386,31 @@ def _distinct(rows: list[dict]) -> list[dict]:
     return out
 
 
+def _vs_lists(row: dict) -> dict:
+    """`{their list's key: [rate, source, games]}` off a row's per-threat table.
+
+    THE MATCHUP MAP'S EDGES (2026-11-10). A family's figure on a row (`vs`) is
+    the likelihood-weighted mean of the row's rate against each of their lists
+    of that family; this is those rates, one per list, with the rung of the
+    evidence ladder each came off (exact pair, this list's version, this list,
+    one card different, two, the archetype). A list with no rate is absent,
+    never 50. ~30 bytes a list, so it rides on every recommended row where the
+    full table (~4 kB) stays on the top one only.
+    """
+    out: dict[str, list] = {}
+    for m in row.get("matchups") or []:
+        if m.get("winRate") is None or not m.get("threat"):
+            continue
+        out[m["threat"]] = [round(float(m["winRate"]), 1), m.get("source"),
+                            int(m.get("games") or 0)]
+    return out
+
+
+#: A threat as the Deck Counter's matchup map draws it.
+_THREAT_PUBLIC = ("key", "cards", "art", "artInferred", "name", "archetype", "family",
+                  "likelihood", "observedCount", "winRate")
+
+
 def _evidence_on_top(rows: list[dict], keep: int = 1) -> list[dict]:
     """`matchups` stays on the first `keep` rows only, and is dropped from the rest.
 
@@ -3915,6 +3940,11 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     for r in recommended:
         if blue and not r.get("owner"):
             r["fill"] = True
+        # THE MATCHUP MAP (2026-11-10): each of their lists this row was rated
+        # against, compact, before `_evidence_on_top` drops the table.
+        lists = _vs_lists(r)
+        if lists:
+            r["vsLists"] = lists
     try:
         main = _main_view(pool_rows(), plays, names, finish) if threats else None
     except Exception:  # noqa: BLE001 - an extra block, never a reason to fail the folder
@@ -4192,6 +4222,11 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
         "battles": opp["battles"],
         "window": opp["window"],
         "plays": folder["plays"],
+        # THEIR LISTS the figures were measured against (2026-11-10), most
+        # likely first: the left-hand column of the matchup map. Each deck's
+        # `vsLists` is keyed by these.
+        "threats": [{k: t[k] for k in _THREAT_PUBLIC if k in t}
+                    for t in folder.get("threats") or []],
         "read": folder.get("read"),
         "decks": folder["recommended"],
         "byFamily": folder.get("byFamily") or [],

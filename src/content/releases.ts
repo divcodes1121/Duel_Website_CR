@@ -82,6 +82,16 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-11-10-matchup-map',
+    date: '2026-11-10',
+    kind: 'new',
+    title: 'Deck Counter: a matchup map',
+    body: [
+      'Click a deck type they are likely to bring, or the Matchups button on a suggested deck, and a map draws every pairing as a chain: their deck, the matchup, your deck, coloured by who is favoured.',
+      'Click a matchup to see how its figure is made: each of their lists with how likely it is, your rate against each one, and how close the stored evidence is (the same lists, one card different, or only the archetype).',
+    ],
+  },
+  {
     id: '2026-11-03-team-scout-variety',
     date: '2026-11-03',
     kind: 'improved',
