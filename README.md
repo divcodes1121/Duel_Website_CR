@@ -4384,6 +4384,57 @@ resolves identically everywhere. Verified rather than eyeballed: a browser check
 asserts that every list has exactly one distinct deck-start x, across all four
 tables.
 
+### The matchup map (2026-11-10)
+
+Asked for: *"how is the matchup % decided ... when we click an opponent deck
+or the suggested deck it will make a chain ... which deck to play against this
+deck with the actual comparison of matchup, then the 1 card or 2 card"*, with a
+flow-editor picture for the look. Live as `05dbad6`.
+
+**How each figure is made** (unchanged, now drawn):
+
+| Figure | Where it comes from |
+|---|---|
+| "Hog Rider 23%" in *Likely to bring* | the chance they bring that family: their games in the window, recency-weighted, duel games x30 (older duels x10), then the 0.5 power (`team_scout.played_space`) |
+| a deck's rate vs ONE of their lists | the fused rate off the best rung available (these two exact lists / lists within 1 card / your list vs their archetype / 1 or 2 cards different / archetype average), then the card model and the balance drag |
+| a deck's rate vs a family ("Drill 64%") | the likelihood-weighted mean of its rates vs that family's lists |
+| the deck's headline | every family weighted by the chance they bring it |
+
+**What is on screen.** Click a *Likely to bring* chip, the **Matchup map**
+button, or a deck's **Matchups** button. Three columns: their families (cards
+of their most likely list, chance, games, lists), one matchup node per pairing
+(rate, the rung carrying most of the family's chance, games, lists), our
+decks. Wires are coloured win (55+) / close (50-55) / lose and draw in once;
+the packet runs once per re-centre; reduced motion draws neither. Clicking a
+node in the map re-centres it. A matchup node opens the detail underneath:
+each of their lists with its share of the family, our rate against it, the
+rung and games; our deck with its actions; and `/api/analytics/matchup` for
+the pair (the ladder, or the single reading when there is one). Below 860px of
+its own width the map is a spine: the chosen deck, then each matchup above
+the deck it leads to.
+
+**Server** (`team_analysis.py`): `bring()` publishes `threats` (the folder's
+lists, `_THREAT_PUBLIC` fields) and each deck carries `vsLists` =
+`{their list key: [rate, source, games]}` (`_vs_lists`, set on every folder
+before `_evidence_on_top` drops the per-threat tables). No rate changed; no
+route added. `test_team_analysis` 377 checks the family rate equals the
+weighted mean of the list rates. A server without the change still draws the
+map, without their cards, rungs or the pair record.
+
+**Files**: `utils/matchupFlow.ts` (no imports beyond types: `buildFlow`,
+`chainFor`, `firstLink`, `dominantSource`, `wirePath`; a family with no
+measured rate has NO link, never 50), `components/Analytics/MatchupFlow/`,
+`BringAgainst.tsx`. Tests `tests/matchupFlow.test.ts` 7. Release note
+`2026-11-10-matchup-map`.
+
+**Verified**: 38/38 locally on staged real answers (dark/light 1440, 1280 with
+ten families, 390 touch both themes; every wire starts and ends on a node,
+figures equal the deck's `vs`); then **18/18 signed in on
+https://deckkies.com** for two players (live answer carries 20 lists and
+per-list rates, map figures equal the chips, pair record reads, no page
+errors). Screenshots `testing/flow-*.png`, `testing/live-flow-*.png`.
+Not yet on Team Analysis (its folders already hold `plays`/`threats`).
+
 ### Deck vs Deck on both Deck Counters (2026-09-27)
 
 Asked for directly: *"Deck Counter on the main tab should also have that deck
