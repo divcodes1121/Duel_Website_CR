@@ -13602,6 +13602,65 @@ import is eager until that is fixed, and the reason is written at the import.
 
 ---
 
+## Duel decks from the CRL list only, kept in CRL_Players.txt (2026-11-10)
+
+Asked: "include more duel sets from the same time period once selected for
+scout ... more duel decks than top 1k", then "make sure the duel decks we pick
+are the top CRL ones only, not some random guys", then "research the top 64
+or 156 CRL leaderboard for this year, save the names and tags here so I can
+add / delete, and search on that list only". Live as `af8b669` (server
+16:42 UTC, backups `team_analysis.py.bak-20261110-164230-precrlonly`).
+
+**What the pool was.** For a window (7D, 15D, 30D ...) the scouting pool was
+the top 1,000 ranked players' lists, the CRL group's staples (two of them, or
+one of them 20 times), and since 7.1 every list ANYBODY fielded in a duel in
+the window (3 games, 2 pilots). On 30 days that last half was 2,394 of 2,906
+lists and about half of every top ten.
+
+**What it is now.** The top 1,000's lists, plus every list the CRL group
+played twice or more in duels in the window (`CRL_SOLO_GAMES` 20 -> 2).
+Nobody else's duels. Staged on 10 real opponents before the deploy:
+
+| 30 days | before | CRL only, old bar | **CRL only, two games** |
+|---|---|---|---|
+| pool | 2,906 | 514 | 696 |
+| CRL duel lists | 116 | 121 | 346 |
+| strangers' lists in the top tens | 47% | 0 | 0 |
+| CRL lists in the top tens | 2% | 1% | 11% (18% at 7 days) |
+| decks a folder | 27.7 | 22.4 | 24.4 |
+| #1 / top ten | 66.7 / 60.1 | 66.3 / 59.7 | 66.3 / 59.7 |
+| most one list repeats over 10 opponents | 7 | 7 | 7 |
+
+The one-player-short-run fear behind the old bar (6.0-6.1) did not come back.
+Live after the deploy: 30 days 696 (482 top + 346 CRL), 7 days 335 (253 + 142).
+
+**The list.** `CRL_Players.txt` at the repo root, git-ignored (player tags; the
+repository is public). One player per line, `Name #TAG`, notes after `//`.
+Two sections: the CRL 2026 leaderboard researched on 2026-11-10 (the April
+Swiss Top 64 with tags from the RoyaleAPI links on
+[squrs-blog's S1 data page](https://squrs-blog.pages.dev/clashroyale/esports/crl_2026_s1_data),
+plus five May-August finalists matched to one tracked account each; every tag
+is a tracked player), then the 421 other players of the CRL top-1,000 group
+used since October. Six finalists whose name matches several accounts are
+listed switched off with their candidates. No source publishes a top 156,
+and after April only each month's Top 16, untagged. Leaderboard only would be
+16 duel lists at 7 days and 76 at 30; with the group 214 and 529 (account
+holder chose both).
+
+`python scripts/push-crl-players.py` (`--dry-run` to look) checks every tag
+(alphabet, no repeats, at least 10 players), shows who is added and removed,
+writes the group `crl` of `server/.duel_cohorts.json` on the server (mode 600,
+old file kept as `.bak-<time>`, newest five), and leaves any other group
+alone. No restart: the pool is keyed on the file. **The same group is the CRL
+group everywhere**: Coach Assist's CRL read and its routing, Coach Duel's CRL
+lists, 2v2 Decks' top players.
+
+**The brains.** Unchanged: one brain per win condition rates its lists against
+each of the opponent's decks and keeps its top five (7.2); the main brain picks
+across win conditions. The pool change is what they choose from.
+
+---
+
 ## Ten of their decks, and suggestions that vary (2026-11-03)
 
 Asked: the opponent's decks should show what they play in ladder and friendly
