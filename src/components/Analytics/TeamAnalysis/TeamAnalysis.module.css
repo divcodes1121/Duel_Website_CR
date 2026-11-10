@@ -1726,3 +1726,88 @@
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
+
+/* -- The matchup map (2026-11-10) ----------------------------------------- */
+
+.recMap,
+.mapSet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.14rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--accent-select) 60%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-select) 12%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.recMap:hover,
+.mapSet:hover {
+  border-color: var(--accent-select);
+}
+
+.recMap {
+  align-self: flex-end;
+}
+
+.mapSet[aria-pressed='true'] {
+  background: var(--solid-blue);
+  border-color: var(--solid-blue);
+  color: var(--on-solid);
+}
+
+.mapSets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mapSetsLabel {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 0.2rem;
+}
+
+.spreadHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.spreadPick {
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+
+.spreadPick:hover {
+  background: color-mix(in srgb, var(--hue-red) 8%, transparent);
+}
+
+.spreadPick[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--hue-red) 55%, transparent);
+  background: color-mix(in srgb, var(--hue-red) 12%, transparent);
+}
+
+.mapWrap {
+  margin-top: 1rem;
+  scroll-margin-top: 1rem;
+}

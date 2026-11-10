@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   MatchupReport,
   PlaysFamily,
@@ -12,6 +12,7 @@ import { drawnDeck, formInferred } from '../../../utils/deckSeating';
 import { shareLabel } from '../../../utils/bringAgainst';
 import {
   buildFlow,
+  FLOW_MAX_DECKS,
   chainFor,
   firstLink,
   sourceWord,
@@ -373,6 +374,7 @@ export function MatchupFlow({
   focus: asked,
   onFocus,
   onClose,
+  toolbar,
 }: {
   plays: PlaysFamily[];
   threats?: TeamThreat[];
@@ -380,8 +382,19 @@ export function MatchupFlow({
   focus: FlowFocus | null;
   onFocus: (f: FlowFocus) => void;
   onClose?: () => void;
+  /** Drawn under the header: Team Analysis's choice of whose decks to map. */
+  toolbar?: ReactNode;
 }) {
-  const model = useMemo(() => buildFlow(plays, threats, decks), [plays, threats, decks]);
+  /* TEN DECKS ON THE RIGHT until asked for more, and back to ten whenever
+     the list changes (another teammate). The deck it was opened on is always
+     drawn, at its own rank. */
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => setShowAll(false), [decks]);
+  const keep = asked?.side === 'ours' ? asked.id : undefined;
+  const model = useMemo(
+    () => buildFlow(plays, threats, decks, showAll ? {} : { limit: FLOW_MAX_DECKS, keep }),
+    [plays, threats, decks, showAll, keep],
+  );
   const focus = validFocus(model, asked);
   const chain = useMemo(() => (focus ? chainFor(model, focus) : []), [model, focus?.side, focus?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusKey = focus ? `${focus.side}:${focus.id}` : '';
@@ -531,6 +544,8 @@ export function MatchupFlow({
         )}
       </header>
 
+      {toolbar && <div className={styles.toolbar}>{toolbar}</div>}
+
       {!wide && (
         <div className={styles.jump} role="group" aria-label="Their decks">
           {model.their.map((t) => (
@@ -663,8 +678,33 @@ export function MatchupFlow({
         )}
       </div>
 
+      {(model.hidden > 0 || (showAll && decks.length > FLOW_MAX_DECKS)) && (
+        <div className={styles.more}>
+          <button
+            type="button"
+            className={styles.moreButton}
+            onClick={() => setShowAll(!showAll)}
+            data-flow-more
+          >
+            {showAll ? `Show the top ${FLOW_MAX_DECKS}` : `Show all ${decks.length} decks`}
+          </button>
+        </div>
+      )}
+
       {chain.length === 0 && <p className={styles.empty}>No measured matchups here yet.</p>}
       {open && <Detail model={model} link={open} />}
     </div>
+  );
+}
+
+/** The map's mark: one deck wired to two. Used by every button that opens it. */
+export function MapGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <rect x="2.5" y="9" width="5" height="6" rx="1.5" />
+      <rect x="16.5" y="3" width="5" height="6" rx="1.5" />
+      <rect x="16.5" y="15" width="5" height="6" rx="1.5" />
+      <path d="M7.5 12c4.5 0 4.5-6 9-6M7.5 12c4.5 0 4.5 6 9 6" />
+    </svg>
   );
 }

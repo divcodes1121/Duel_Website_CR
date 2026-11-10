@@ -78,6 +78,24 @@ describe('the matchup map', () => {
     expect(l.tone).toBe('even');
   });
 
+  it("reads a Team Analysis row's rates by position in the threats (vsAt)", () => {
+    const d = deck('t', { hog: 58 });
+    (d as TeamRecommendation).vsAt = [[60, 'version', 100], null, [70, 'cluster6', 9]];
+    const m = buildFlow(plays, threats, [d]);
+    const l = m.link('hog', 't')!;
+    expect(l.lists.map((x) => x.rate)).toEqual([60, null]);
+    expect(l.source).toBe('version');
+    expect(m.link('drill', 't')).toBeNull();
+  });
+
+  it('draws the first N decks, plus the one it was opened on at its own rank', () => {
+    const many = Array.from({ length: 14 }, (_, i) => deck(`k${i}`, { hog: 55 }));
+    const m = buildFlow(plays, threats, many, { limit: 10, keep: 'k12' });
+    expect(m.ours.map((o) => o.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 13]);
+    expect(m.hidden).toBe(3);
+    expect(buildFlow(plays, threats, many).hidden).toBe(0);
+  });
+
   it('falls back to the most likely family when the focus is gone', () => {
     const m = buildFlow(plays, threats, decks);
     expect(validFocus(m, { side: 'ours', id: 'zzz' })).toEqual({ side: 'their', id: 'hog' });

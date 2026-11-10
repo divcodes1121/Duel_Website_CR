@@ -127,6 +127,8 @@ export function dominantSource(lists: Pick<FlowList, 'within' | 'source' | 'rate
 export interface FlowModel {
   their: TheirNode[];
   ours: OurNode[];
+  /** Decks left out by `limit`, to say so and offer them. */
+  hidden: number;
   /** Null when the deck has no measured rate against that family — never 50. */
   link(family: string, id: string): FlowLink | null;
 }
@@ -134,12 +136,22 @@ export interface FlowModel {
 /** Families drawn on the left, at most — the chips' own limit. */
 export const FLOW_MAX_FAMILIES = 10;
 
+/** Decks drawn on the right before "Show all": a teammate's list in a match
+ *  plan runs to 24-29, and the Deck Counter's is ten. */
+export const FLOW_MAX_DECKS = 10;
+
 export function buildFlow(
   plays: PlaysFamily[],
   threats: TeamThreat[] | undefined,
   decks: TeamRecommendation[],
+  /** Draw the first `limit` decks, plus `keep` wherever it sits in the list
+   *  (the deck the map was opened on). Ranks stay the list's own. */
+  opts: { limit?: number; keep?: string } = {},
 ): FlowModel {
   const byFamily = new Map<string, TeamThreat[]>();
+  /* A Team Analysis row carries its rates by position in `threats` (`vsAt`),
+     the Deck Counter's keyed by list (`vsLists`). */
+  const position = new Map((threats ?? []).map((t, i) => [t.key, i]));
   for (const t of threats ?? []) {
     const f = t.family ?? t.archetype;
     if (!f) continue;
@@ -174,7 +186,9 @@ export function buildFlow(
     };
   });
 
-  const ours: OurNode[] = decks.map((d, i) => ({ id: deckId(d), rank: i + 1, deck: d }));
+  const all: OurNode[] = decks.map((d, i) => ({ id: deckId(d), rank: i + 1, deck: d }));
+  const limit = opts.limit ?? Infinity;
+  const ours = all.filter((o, i) => i < limit || o.id === opts.keep);
   const deckById = new Map(ours.map((o) => [o.id, o.deck]));
   const nodeByFamily = new Map(their.map((n) => [n.family, n]));
   const memo = new Map<string, FlowLink | null>();
@@ -188,7 +202,8 @@ export function buildFlow(
     let out: FlowLink | null = null;
     if (deck && node && rate !== undefined && rate !== null) {
       const lists = node.lists.map((l) => {
-        const v = deck.vsLists?.[l.key];
+        const at = position.get(l.key);
+        const v = deck.vsLists?.[l.key] ?? (at === undefined ? null : deck.vsAt?.[at] ?? null);
         return v ? { ...l, rate: v[0], source: v[1], evidence: v[2] } : { ...l };
       });
       out = {
@@ -205,7 +220,7 @@ export function buildFlow(
     return out;
   }
 
-  return { their, ours, link };
+  return { their, ours, hidden: all.length - ours.length, link };
 }
 
 /** The links the map draws for a focus, in the order of the OTHER column —

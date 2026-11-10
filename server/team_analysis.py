@@ -3406,6 +3406,37 @@ def _vs_lists(row: dict) -> dict:
     return out
 
 
+def _vs_at(row: dict, index: dict) -> list | None:
+    """`_vs_lists`, lined up with the folder's `threats` instead of keyed by them.
+
+    TEAM ANALYSIS'S FORM (2026-11-10). A list's key is its eight card names,
+    ~80 bytes, so keyed rates cost ~2.2 kB a row, and a match plan carries a
+    list per teammate per opponent (12v12 = ~1,700 rows, ~3.7 MB, past the
+    saved-board cap). By position it is ~0.4 kB. `null` where the row has no
+    rate against that list; trailing nulls dropped.
+    """
+    lists = _vs_lists(row)
+    if not lists:
+        return None
+    out: list = [None] * len(index)
+    for key, v in lists.items():
+        i = index.get(key)
+        if i is not None:
+            out[i] = v
+    while out and out[-1] is None:
+        out.pop()
+    return out or None
+
+
+def _set_vs_at(rows: list[dict], threats: list[dict]) -> None:
+    """`vsAt` on each row, before `_evidence_on_top` drops the per-threat table."""
+    index = {t["key"]: i for i, t in enumerate(threats) if t.get("key")}
+    for r in rows:
+        at = _vs_at(r, index)
+        if at:
+            r["vsAt"] = at
+
+
 #: A threat as the Deck Counter's matchup map draws it.
 _THREAT_PUBLIC = ("key", "cards", "art", "artInferred", "name", "archetype", "family",
                   "likelihood", "observedCount", "winRate")
@@ -3890,8 +3921,9 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
         # player's decks — the left half of the board showing the wrong team.
         own = [d for d in (mate.get("decks") or [])
                if len(set(d.get("cards") or [])) == 8]
-        listing = (plan_lists[mate["tag"]] if plan_lists is not None
-                   else suggested(rows, PER_PLAYER_TOP_N))
+        listing = finish(plan_lists[mate["tag"]] if plan_lists is not None
+                         else suggested(rows, PER_PLAYER_TOP_N))
+        _set_vs_at(listing, threats)
         per_player.append({
             "owner": {"tag": mate["tag"], "name": mate["name"]},
             "basis": mate["basis"],
@@ -3900,7 +3932,7 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
             # counters to what this opponent plays, in the order of the figure
             # printed. Their own decks keep a real edge (`FIT_WEIGHT`, up to
             # 1.5 points), and a near-copy of one of theirs is refused.
-            "decks": _evidence_on_top(finish(listing), keep=0),
+            "decks": _evidence_on_top(listing, keep=0),
             "considered": len(rows),
             # WHICH empty state this is, said rather than inferred from a
             # missing list. The three are genuinely different problems: nothing
@@ -3940,11 +3972,9 @@ def _folder(opponent: dict, blue: list[dict], cards: list[_Candidate],
     for r in recommended:
         if blue and not r.get("owner"):
             r["fill"] = True
-        # THE MATCHUP MAP (2026-11-10): each of their lists this row was rated
-        # against, compact, before `_evidence_on_top` drops the table.
-        lists = _vs_lists(r)
-        if lists:
-            r["vsLists"] = lists
+    # THE MATCHUP MAP (2026-11-10): each of their lists this row was rated
+    # against, by position in `threats`, before `_evidence_on_top` drops it.
+    _set_vs_at(recommended, threats)
     try:
         main = _main_view(pool_rows(), plays, names, finish) if threats else None
     except Exception:  # noqa: BLE001 - an extra block, never a reason to fail the folder
@@ -4217,6 +4247,14 @@ def bring(tag: str, since: str | None = None, until: str | None = None) -> dict:
         except Exception:  # noqa: BLE001
             traceback.print_exc()
     folder = _folder(opp, [], cards, snap, BRING_TOP_N, None, ctx, views=True)
+    # The Deck Counter reads the rates keyed by list (`vsLists`, live since
+    # 05dbad6); a folder carries them by position (`vsAt`).
+    keys = [t.get("key") for t in folder.get("threats") or []]
+    for d in folder["recommended"]:
+        at = d.pop("vsAt", None)
+        if at:
+            d["vsLists"] = {keys[i]: v for i, v in enumerate(at)
+                            if v is not None and i < len(keys) and keys[i]}
     return {
         "basis": opp["basis"],
         "battles": opp["battles"],

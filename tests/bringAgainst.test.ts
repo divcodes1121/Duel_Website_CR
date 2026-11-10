@@ -234,7 +234,8 @@ describe('the Deck Counter’s list is the scouting engine’s', () => {
     // chips at all before, so a scouting row showed one weighted figure only.
     // (7.2: and its win-condition brain, for the top-5 dropdown.)
     expect(folders).toMatch(
-      /<Recommendation\s+key=\{`\$\{r\.archetype\}-\$\{i\}`\}\s+rec=\{r\}\s+rank=\{i \+ 1\}\s+labels=\{labels\}\s+brain=\{brainOf\(r\)\}\s+\/>/,
+      // (2026-11-10: and the matchup map's Matchups button, `onMap`.)
+      /<Recommendation\s+key=\{`\$\{r\.archetype\}-\$\{i\}`\}\s+rec=\{r\}\s+rank=\{i \+ 1\}\s+labels=\{labels\}\s+brain=\{brainOf\(r\)\}\s+(onMap=\{\(\) => openMap\(\{ side: 'ours', id: deckId\(r\) \}\)\}\s+)?\/>/,
     );
     expect(folders).toMatch(/labels=\{chipLabels\(overall\)\}/);
   });

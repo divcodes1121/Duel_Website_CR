@@ -82,6 +82,19 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-11-10-team-matchup-map',
+    date: '2026-11-10',
+    kind: 'new',
+    title: 'Team Analysis: the matchup map in every opponent folder',
+    body: [
+      'In a Scouting Report or a Match Plan, click a deck type under Likely to bring, or the Matchups button on any suggested deck, to see every pairing as a chain against that opponent.',
+      'In a Match Plan, pick whose decks to map: the squad’s best, or any one teammate’s own list.',
+    ],
+    href: '#/teams',
+    hrefLabel: 'Open Team Analysis',
+    needs: 'trial',
+  },
+  {
     id: '2026-11-10-matchup-map',
     date: '2026-11-10',
     kind: 'new',

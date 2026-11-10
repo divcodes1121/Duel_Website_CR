@@ -2777,6 +2777,10 @@ export interface TeamRecommendation {
    *  off, and the games behind it. A family's `vs` is the likelihood-weighted
    *  mean of these. A list with no rate is absent. */
   vsLists?: Record<string, [number, string | null, number]>;
+  /** The same rates BY POSITION in the folder's `threats` (Team Analysis,
+   *  2026-11-10): a list's key is ~80 bytes and a match plan has a list per
+   *  teammate per opponent. `null` where there is no rate. */
+  vsAt?: ([number, string | null, number] | null)[];
   /** Families (`plays[].family`) this row is the list's best counter to, at
    *  55% or better. */
   answers?: string[];

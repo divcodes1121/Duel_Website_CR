@@ -1,5 +1,6 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type {
+  PlaysFamily,
   TeamBrain,
   TeamBrainDeck,
   TeamFolder,
@@ -22,6 +23,8 @@ import styles from './TeamAnalysis.module.css';
 import { Threats } from './Threats';
 import { SuggestHeading } from './SuggestHeading';
 import { gamesLabel, modeSplit } from '../../../utils/teamModes';
+import { MapGlyph, MatchupFlow } from '../MatchupFlow/MatchupFlow';
+import { deckId, type FlowFocus } from '../../../utils/matchupFlow';
 
 /**
  * The folders under a team analysis: a gallery of opponents, and the opened
@@ -393,8 +396,10 @@ function BrainDeckRow({ d, rank, labels, current }: {
   );
 }
 
-function Recommendation({ rec, rank, labels, brain, figure }: {
+function Recommendation({ rec, rank, labels, brain, figure, onMap }: {
   rec: TeamRecommendation;
+  /** Opens the matchup map centred on this deck (2026-11-10). */
+  onMap?: () => void;
   rank?: number;
   /** 'main' prints `vsMain` — the rate against what they play most — as the
    *  headline (the "Against what they play most" block, 2026-11-03). */
@@ -459,6 +464,18 @@ function Recommendation({ rec, rank, labels, brain, figure }: {
           )}
         </div>
         <div className={styles.recFigures}>
+          {onMap && (
+            <button
+              type="button"
+              className={styles.recMap}
+              onClick={onMap}
+              data-map-deck={rank}
+              title="See this deck's matchup against each deck they play"
+            >
+              <MapGlyph />
+              Matchups
+            </button>
+          )}
           {/* The tooltip also names any card of the deck the game changed
               lately (the card manual's balance log); a nerf is in the figure. */}
           <span
@@ -649,8 +666,9 @@ const NO_OPTIONS: Record<string, string> = {
  * that produced it, so the list answers "who should take this one" before
  * anything is opened at all — the expansion is for *why*, not for *what*.
  */
-function PlayerRow({ row, open, onToggle, labels, brainOf }: {
+function PlayerRow({ row, open, onToggle, labels, brainOf, onMap }: {
   row: TeamPlayerOptions;
+  onMap?: (rec: TeamRecommendation) => void;
   open: boolean;
   onToggle: () => void;
   labels?: [string, string][];
@@ -726,6 +744,7 @@ function PlayerRow({ row, open, onToggle, labels, brainOf }: {
               rank={i + 1}
               labels={labels}
               brain={brainOf?.(r)}
+              onMap={onMap ? () => onMap(r) : undefined}
             />
           ))}
         </ol>
@@ -767,6 +786,39 @@ export function OpenFolder({
   /* 7.2: each suggested deck's win-condition brain, for its dropdown. */
   const brains = new Map((folder.brains?.brains ?? []).map((b) => [b.family, b]));
   const brainOf = (r: TeamRecommendation) => (r.winFamily ? brains.get(r.winFamily) : undefined);
+
+  /* THE MATCHUP MAP (2026-11-10): what it is centred on, and - in a match
+     plan - whose decks make its right-hand column: the squad's best list, or
+     one teammate's own. */
+  const [map, setMap] = useState<FlowFocus | null>(null);
+  const [mapSet, setMapSet] = useState<string>('squad');
+  const mapRef = useRef<HTMLDivElement>(null);
+  const openMap = (f: FlowFocus, set?: string) => {
+    if (set) setMapSet(set);
+    setMap(f);
+    requestAnimationFrame(() =>
+      mapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }),
+    );
+  };
+  const mapPlays: PlaysFamily[] = folder.plays?.length
+    ? folder.plays
+    : folder.spread.map((sp) => ({
+        family: sp.archetype,
+        archetype: sp.archetype,
+        name: sp.name,
+        share: sp.weight,
+        games: sp.games,
+        decks: 0,
+      }));
+  const mates = folder.perPlayer.filter((pp) => pp.decks.length > 0);
+  const mapMate = scout ? undefined : mates.find((pp) => pp.owner.tag === mapSet);
+  const mapDecks = mapMate ? mapMate.decks : folder.recommended;
+  const mapFamily = map?.side === 'their' ? map.id : null;
+  const setOptions = [
+    { id: 'squad', label: "Squad's best" },
+    ...mates.map((pp) => ({ id: pp.owner.tag, label: pp.owner.name })),
+  ];
+
   return (
     <div className={styles.open}>
       <div className={styles.openHead}>
@@ -820,10 +872,33 @@ export function OpenFolder({
 
               {/* THE CHANCE, NOT THE HISTORY (brain 4.0): the bars are what the
                   right-hand side was scored against. */}
-              {folder.spread.length > 0 && <h4 className={styles.boardTitle}>Likely to bring</h4>}
+              {folder.spread.length > 0 && (
+                <div className={styles.spreadHead}>
+                  <h4 className={styles.boardTitle}>Likely to bring</h4>
+                  {!map && mapDecks.length > 0 && (
+                    <button
+                      type="button"
+                      className={styles.recMap}
+                      onClick={() => openMap({ side: 'their', id: mapPlays[0]?.family ?? '' })}
+                      data-map-open
+                    >
+                      <MapGlyph />
+                      Matchup map
+                    </button>
+                  )}
+                </div>
+              )}
               <ul className={styles.spread}>
                 {folder.spread.map((s) => (
-                  <li key={s.archetype} className={styles.spreadRow}>
+                  <li key={s.archetype}>
+                    <button
+                      type="button"
+                      className={`${styles.spreadRow} ${styles.spreadPick}`}
+                      onClick={() => openMap({ side: 'their', id: s.archetype })}
+                      aria-pressed={mapFamily === s.archetype}
+                      data-play={s.archetype}
+                      title="See which of your decks answer it, and by how much"
+                    >
                     <span>{s.name}</span>
                     <span className={styles.spreadBar} aria-hidden="true">
                       <span style={{ width: `${s.share}%` }} />
@@ -843,6 +918,7 @@ export function OpenFolder({
                         {gamesLabel(s.gameShare)}
                       </span>
                     )}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -875,6 +951,7 @@ export function OpenFolder({
                       rank={i + 1}
                       labels={labels}
                       brain={brainOf(r)}
+                      onMap={() => openMap({ side: 'ours', id: deckId(r) })}
                     />
                   ))}
                 </ol>
@@ -895,6 +972,7 @@ export function OpenFolder({
                       row={row}
                       labels={labels}
                       brainOf={brainOf}
+                      onMap={(r) => openMap({ side: 'ours', id: deckId(r) }, row.owner.tag)}
                       open={openMate === row.owner.tag}
                       onToggle={() =>
                         setOpenMate(openMate === row.owner.tag ? null : row.owner.tag)
@@ -906,6 +984,40 @@ export function OpenFolder({
             )}
           </div>
 
+          {map && mapDecks.length > 0 && (
+            <div ref={mapRef} className={styles.mapWrap} data-team-map>
+              <MatchupFlow
+                plays={mapPlays}
+                threats={folder.threats}
+                decks={mapDecks}
+                focus={map}
+                onFocus={setMap}
+                onClose={() => setMap(null)}
+                toolbar={
+                  !scout && mates.length > 0 ? (
+                    <div className={styles.mapSets} role="group" aria-label="Whose decks">
+                      <span className={styles.mapSetsLabel}>Your side</span>
+                      {setOptions.map((o) => (
+                        <button
+                          key={o.id}
+                          type="button"
+                          className={styles.mapSet}
+                          aria-pressed={(mapMate?.owner.tag ?? 'squad') === o.id}
+                          data-map-set={o.id}
+                          onClick={() => {
+                            setMapSet(o.id);
+                            if (map.side === 'ours') setMap({ side: 'their', id: mapPlays[0]?.family ?? '' });
+                          }}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : undefined
+                }
+              />
+            </div>
+          )}
         </>
       )}
     </div>

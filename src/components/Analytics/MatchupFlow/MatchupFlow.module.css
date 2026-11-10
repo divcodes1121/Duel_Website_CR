@@ -749,6 +749,28 @@ g[data-open] .wireGlow {
   color: var(--text-muted);
 }
 
+/* "Show all 24 decks": under the right-hand column. */
+.more {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.moreButton {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--hue-blue) 45%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hue-blue) 10%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.moreButton:hover {
+  border-color: var(--hue-blue);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .root,
   .mid,
@@ -811,4 +833,12 @@ g[data-open] .wireGlow {
   justify-content: flex-start;
   gap: 0.15rem 0.5rem;
   text-align: left;
+}
+
+/* Team Analysis: whose decks the right-hand column is (squad / a teammate). */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
 }

@@ -422,6 +422,34 @@ check("a row that produced decks states no reason",
 check("no per-teammate deck carries the per-threat table — nothing reads it",
       any(r["decks"] for r in folder["perPlayer"])
       and all("matchups" not in d for r in folder["perPlayer"] for d in r["decks"]))
+# THE MATCHUP MAP IN TEAM ANALYSIS (2026-11-10): every row of the squad list
+# and of each teammate's list carries its per-list rates BY POSITION in the
+# folder's threats, and a family's figure is their likelihood-weighted mean.
+_fth = folder["threats"]
+
+
+def _at_mean(d, fam):
+    num = den = 0.0
+    for i, t in enumerate(_fth):
+        v = d["vsAt"][i] if i < len(d["vsAt"]) else None
+        if v and (t.get("family") or t.get("archetype")) == fam:
+            num += t["likelihood"] * v[0]
+            den += t["likelihood"]
+    return num / den if den else None
+
+
+_rows_at = folder["recommended"] + [d for r in folder["perPlayer"] for d in r["decks"]]
+check("the map: every squad and teammate row carries vsAt, lined up with threats",
+      _rows_at and all(d.get("vsAt") and len(d["vsAt"]) <= len(_fth)
+                       and all(v is None or (len(v) == 3 and 0 <= v[0] <= 100) for v in d["vsAt"])
+                       for d in _rows_at), str([d.get("vsAt") for d in _rows_at][:1]))
+check("...no folder row carries the keyed form (that is the Deck Counter's)",
+      all("vsLists" not in d for d in _rows_at))
+check("...and each family figure is the weighted mean of its lists' rates",
+      all(abs(_at_mean(d, f) - r) <= 0.11 for d in _rows_at for f, r in (d.get("vs") or {}).items()
+          if _at_mean(d, f) is not None)
+      and any(_at_mean(d, f) is not None for d in _rows_at for f in (d.get("vs") or {})),
+      str([(f, r, _at_mean(d, f)) for d in _rows_at[:1] for f, r in (d.get("vs") or {}).items()]))
 check("the folder's top pick keeps it, for the PDF",
       bool(folder["recommended"]) and "matchups" in folder["recommended"][0]
       and all("matchups" not in d for d in folder["recommended"][1:]))

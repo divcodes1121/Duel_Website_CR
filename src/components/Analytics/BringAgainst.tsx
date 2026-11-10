@@ -24,7 +24,7 @@ import {
   windowTitle,
   type BringView,
 } from '../../utils/bringAgainst';
-import { MatchupFlow } from './MatchupFlow/MatchupFlow';
+import { MapGlyph, MatchupFlow } from './MatchupFlow/MatchupFlow';
 import { deckId, type FlowFocus } from '../../utils/matchupFlow';
 import styles from './BringAgainst.module.css';
 
@@ -194,17 +194,6 @@ function BringDeck({
 }
 
 /** Three nodes and two wires: the map's own mark. */
-function MapGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-      <rect x="2.5" y="9" width="5" height="6" rx="1.5" />
-      <rect x="16.5" y="3" width="5" height="6" rx="1.5" />
-      <rect x="16.5" y="15" width="5" height="6" rx="1.5" />
-      <path d="M7.5 12c4.5 0 4.5-6 9-6M7.5 12c4.5 0 4.5 6 9 6" />
-    </svg>
-  );
-}
-
 function ByCard({ view, plays }: { view: NonNullable<BringReport['byCard']>; plays: PlaysFamily[] }) {
   const [open, setOpen] = useState<string | null>(view.cards[0]?.card ?? null);
   const card: BringCard | undefined = view.cards.find((c) => c.card === open) ?? view.cards[0];
