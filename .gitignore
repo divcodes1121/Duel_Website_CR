@@ -222,3 +222,6 @@ server/.coach_rooms.db-shm
 # every poll: Team Analysis's pool. No tags inside, kept private anyway.
 server/.top_decks.json
 server/.top_decks.json.tmp
+
+# The CRL players list (player tags): edited here, sent by scripts/push-crl-players.py
+/CRL_Players.txt

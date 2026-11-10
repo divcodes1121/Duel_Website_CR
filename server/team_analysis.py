@@ -2119,7 +2119,16 @@ CRL_MIN_PILOTS = 2
 
 #: ... or one of them brought it this many times (10 in 6.0; 20 since 6.1 —
 #: one CRL player's ten duel games still put a Balloon list on every folder).
-CRL_SOLO_GAMES = 20
+#:
+#: 2 SINCE 2026-11-10: any list the group came back to is in. Asked for with
+#: the strangers' duel lists gone: "more duel decks", "top CRL only". Staged on
+#: 10 real opponents, 30 days, against the 6.1 bar on the same CRL-only pool:
+#: CRL lists 121 -> 346, CRL rows in the top tens 1% -> 11%, decks a folder
+#: 22.4 -> 24.4, #1 66.3 both, top ten 59.70 -> 59.73, and the most one list
+#: repeats across the ten opponents 7 both (the Balloon fear did not return:
+#: the card model rates since 10-11). Against the pool with strangers' lists:
+#: #1 66.7 -> 66.3, top ten 60.1 -> 59.7, decks a folder 27.7 -> 24.4.
+CRL_SOLO_GAMES = 2
 
 #: Rows a list may hold: `ALL_WINCONS` (top of the file).
 
@@ -2165,6 +2174,8 @@ TOP_PER_FAMILY = 1000
 #: 7.2, the same day ("duel decks have so many varieties ... 17 win cons, 17
 #: brains"): 3 games and 2 pilots, with `TOP_MIN_PLAYERS` 2 — a 2,857-list pool,
 #: 29 families; on 20 real opponents 0.9 s an opponent against 0.6 s.
+#: REMOVED 2026-11-10 with the half itself: duel lists come from the CRL group
+#: only. The bars stay named for the record and for anything that reads them.
 DUEL_LIST_MIN_GAMES = 3
 DUEL_LIST_MIN_PILOTS = 2
 DUEL_LIST_MAX_SHARE = 0.5
@@ -2413,21 +2424,13 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
     for key, (n, w, pilots) in crl.items():
         e = wanted.setdefault(key, {"arch": None, "meta": None, "state": None})
         e["crl"] = [n, w, pilots]
-    duelw: dict = {}
-    if _duel_index is not None and hasattr(_duel_index, "window_lists"):
-        try:
-            duelw = _duel_index.window_lists(
-                lo, hi, min_games=DUEL_LIST_MIN_GAMES, min_players=DUEL_LIST_MIN_PILOTS,
-                max_share=DUEL_LIST_MAX_SHARE)
-        except Exception:  # noqa: BLE001 - the other halves still stand
-            traceback.print_exc()
-            duelw = {}
-    for key, (n, w, pilots, arch) in duelw.items():
-        e = wanted.setdefault(key, {"arch": None, "meta": None, "state": None})
-        if not e.get("arch"):
-            e["arch"] = arch
-        e["duel"] = [n, w, pilots]
-    info["duelWindowLists"] = len(duelw)
+    # NO DUEL LIST FROM ANYBODY (2026-11-10). 7.1-7.2 added every list anyone
+    # fielded in a duel in the window (`duel_index.window_lists`): 2,394 of a
+    # 30-day pool's 2,906 lists were nobody's but strangers'. Asked: "the duel
+    # decks we pick should be the top CRL ones only, not some random guys".
+    # Duel lists now come only from the CRL group above, which is the list the
+    # account holder keeps (`CRL_Players.txt`, `scripts/push-crl-players.py`).
+    info["duelWindowLists"] = 0
 
     todo = []
     info["synergySkipped"] = 0

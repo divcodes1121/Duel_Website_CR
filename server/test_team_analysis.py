@@ -1942,6 +1942,7 @@ CR6 = cards("crf")                                            # one player's sta
 ME1, ME2, ME3 = cards("mea"), cards("meb"), cards("mec")     # vetted lists
 ME4 = cards("med")                                           # a less played Hog list
 SH5 = list(SHORT)                                            # cannot fill three slots
+ST1 = cards("sta")                                           # a stranger's duel list
 _gw_calls = []
 
 
@@ -1958,6 +1959,9 @@ _ACT5 = {_k(ME1): {0: 60, 3: 60, 20: 300}, _k(ME2): {1: 40, 5: 40, 20: 400},
          _k(ME3): {2: 3, 4: 3, 20: 3000}, _k(ME4): {0: 30, 2: 30}}
 _fake5 = types.SimpleNamespace(
     group_window=_gw5,
+    # Anybody's duel lists of the window: 40 games, 9 pilots. Not read since
+    # 2026-11-10 ("the top CRL ones only, not some random guys").
+    window_lists=lambda *a, **k: {_k(ST1): [40, 25, 9, "hog"]},
     activity=lambda: {"day": "20261014", "games": _ACT5},
     status=lambda: {"buildId": "b5"},
     available=lambda: True,
@@ -1986,23 +1990,26 @@ try:
           == [30, 30, 7, 7, 15, 30, 90, 90] and ta.POOL_DEFAULT_DAYS == 30)
     p7, i7 = ta._competitive_pool(7)
     keys7 = {c.key: c for c in p7}
+    check("a duel list nobody in the CRL group played is never in the pool, however played",
+          _k(ST1) not in keys7 and i7.get("duelWindowLists") == 0
+          and not any(c.duelw for c in p7), str(i7.get("duelWindowLists")))
     check("the group's lists of the window are read, for its tags, between the window's days",
           _gw_calls and _gw_calls[-1] == (("#TOP1", "#TOP2"), "20261008", "20261015"),
           str(_gw_calls[-1:]))
     check("a list the group brought twice or more is in the pool, once is not",
           _k(CR1) in keys7 and _k(CR2) in keys7 and _k(CR3) not in keys7
           and ta.CRL_MIN_GAMES == 2, str(sorted(keys7)))
-    # 6.0: ONE PLAYER'S SHORT RUN IS NOT A LIST TO SUGGEST. 378 of 506 CRL
-    # lists in the live pool were one player's, 145 of them twice, and the
-    # best of each win condition was the luckiest of them (2026-10-23).
-    check("one player's list from a short run is not in (6.0)",
-          _k(CR5) not in keys7 and _k(CR4) not in keys7, str(sorted(keys7)))
-    check("...two of the group's from two games is, and one player's staple is",
-          _k(CR2) in keys7 and _k(CR6) in keys7
-          and ta.CRL_MIN_PILOTS == 2 and ta.CRL_SOLO_GAMES == 20, str(sorted(keys7)))
-    check("the rule is a staple: pilots, else games",
+    # 6.0-6.1 kept one player's short run out (2 pilots, else 20 games). SINCE
+    # 2026-11-10 the CRL group is the only duel source, and any list one of
+    # them came back to is in ("more duel decks ... top CRL only").
+    check("one CRL player's list played twice or more is in (2026-11-10)",
+          _k(CR5) in keys7 and _k(CR4) in keys7 and _k(CR6) in keys7, str(sorted(keys7)))
+    check("...and the bar is two games, whoever played them",
+          _k(CR2) in keys7 and ta.CRL_MIN_PILOTS == 2 and ta.CRL_SOLO_GAMES == 2,
+          str(sorted(keys7)))
+    check("the rule: two of the group, or two games",
           ta._crl_proven([2, 1, 2]) and ta._crl_proven([20, 3, 1])
-          and not ta._crl_proven([19, 9, 1]) and not ta._crl_proven([3, 3]))
+          and ta._crl_proven([2, 1, 1]) and not ta._crl_proven([1, 1, 1]))
     check("a list that cannot fill all three special slots is not, and is counted",
           _k(SH5) not in keys7 and i7["slotGaps"] == 1, str(i7.get("slotGaps")))
     check("the window's played vetted lists are in it; one fading out of it is not",
@@ -2018,11 +2025,11 @@ try:
           isinstance(keys7[_k(ME1)].profile, ta._SeedProfile)
           and isinstance(keys7[_k(CR1)].profile, ta._ListProfile))
     check("the group's lists lead the pool, most brought first",
-          [c.key for c in p7][:3] == [_k(CR6), _k(CR1), _k(ME1)], str([c.key for c in p7]))
+          [c.key for c in p7][:3] == [_k(CR6), _k(CR1), _k(CR5)], str([c.key for c in p7]))
     check("the pool says what it holds, and over which days",
           i7["days"] == 7 and i7["from"] == "2026-10-08" and i7["to"] == "2026-10-14"
-          and i7["group"] == "crl" and i7["crlLists"] == 4 and i7["metaLists"] == 3
-          and i7["crlGames"] == 31 and i7["pool"] == 6 and i7["crlSkipped"] == 3
+          and i7["group"] == "crl" and i7["crlLists"] == 6 and i7["metaLists"] == 3
+          and i7["crlGames"] == 39 and i7["pool"] == 8 and i7["crlSkipped"] == 1
           and i7["topLists"] == 0 and i7["top"]["reason"] in ("no_file", "no_module"),
           str(ta._pool_public(i7)))
     check("...and a meta list's play in the window rides on its row (`states`)",
