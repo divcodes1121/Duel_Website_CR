@@ -2053,7 +2053,15 @@ POOL_MIN_DAYS = 7
 
 #: Duel games the group must have played a list in, in the window. One game
 #: is an experiment as often as a choice; two is a list somebody came back to.
-CRL_MIN_GAMES = 2
+#:
+#: 1 SINCE 2026-11-10 ("even in 7 days it should be there, not only 30 days"):
+#: the CRL group's duels are few enough that a list one of them brought once is
+#: worth offering. Staged (saved board, 12 players, 7 d / 10 opponents, 7 d /
+#: 30 d): CRL lists 142 -> 250 (346 -> 582 at 30 d); CRL rows in the top tens
+#: 32% -> 67% / 48% -> 63% / 57% -> 77%, in the top threes 42 -> 61% / 43 -> 67%
+#: / 77 -> 87%; #1 62.9 -> 62.8 / 63.7 -> 63.7 / 65.4 -> 65.6, top ten flat or
+#: up, most one list repeats unchanged (10 / 5 / 7).
+CRL_MIN_GAMES = 1
 
 #:
 #: MEASURED AND NOT BUILT (5.1): requiring two of the group, or one of them
@@ -2128,7 +2136,7 @@ CRL_MIN_PILOTS = 2
 #: repeats across the ten opponents 7 both (the Balloon fear did not return:
 #: the card model rates since 10-11). Against the pool with strangers' lists:
 #: #1 66.7 -> 66.3, top ten 60.1 -> 59.7, decks a folder 27.7 -> 24.4.
-CRL_SOLO_GAMES = 2
+CRL_SOLO_GAMES = 1
 
 #: Rows a list may hold: `ALL_WINCONS` (top of the file).
 
@@ -2174,8 +2182,17 @@ TOP_PER_FAMILY = 1000
 #: 7.2, the same day ("duel decks have so many varieties ... 17 win cons, 17
 #: brains"): 3 games and 2 pilots, with `TOP_MIN_PLAYERS` 2 — a 2,857-list pool,
 #: 29 families; on 20 real opponents 0.9 s an opponent against 0.6 s.
-#: REMOVED 2026-11-10 with the half itself: duel lists come from the CRL group
-#: only. The bars stay named for the record and for anything that reads them.
+#: 2026-11-10: the window's other duel lists are a FALLBACK, read only when
+#: the CRL group fielded fewer than `DUEL_FALLBACK_BELOW` lists in the window,
+#: at these bars, and preferred below CRL lists (`DUEL_FALLBACK_PREFER`).
+#:
+#: 150 lists: a window that thin is a quiet week; at the 1-game bar 7 days
+#: holds 250 and 30 days 582, so it does not read today. Staged with it always
+#: on: figures about a point higher, but the CRL rows of the top tens fall back
+#: to a third (strangers' lists outrank them) - the opposite of what was asked.
+#: Preferred like a top 1,000 list (0), below a CRL list.
+DUEL_FALLBACK_BELOW = 150
+DUEL_FALLBACK_PREFER = 0.0
 DUEL_LIST_MIN_GAMES = 3
 DUEL_LIST_MIN_PILOTS = 2
 DUEL_LIST_MAX_SHARE = 0.5
@@ -2210,7 +2227,8 @@ def use_bonus(card) -> float:
     import math
     crl = getattr(card, "crl", None)
     if not crl:
-        return 0.0
+        # A duel list from the fallback tier (not the CRL group's).
+        return DUEL_FALLBACK_PREFER if getattr(card, "duelw", None) else 0.0
     pilots = int(crl[2]) if len(crl) > 2 and crl[2] else 1
     return round(CRL_PREFER + TOP_USE_WEIGHT * math.log2(1 + pilots), 2)
 
@@ -2436,13 +2454,33 @@ def _build_competitive_pool(days: int, last: datetime.date) -> tuple[list, dict]
     for key, (n, w, pilots) in crl.items():
         e = wanted.setdefault(key, {"arch": None, "meta": None, "state": None})
         e["crl"] = [n, w, pilots]
-    # NO DUEL LIST FROM ANYBODY (2026-11-10). 7.1-7.2 added every list anyone
-    # fielded in a duel in the window (`duel_index.window_lists`): 2,394 of a
-    # 30-day pool's 2,906 lists were nobody's but strangers'. Asked: "the duel
-    # decks we pick should be the top CRL ones only, not some random guys".
-    # Duel lists now come only from the CRL group above, which is the list the
-    # account holder keeps (`CRL_Players.txt`, `scripts/push-crl-players.py`).
-    info["duelWindowLists"] = 0
+    # ANYBODY'S DUEL LISTS ONLY AS A FALLBACK (2026-11-10). 7.1-7.2 added every
+    # list anyone fielded in a duel in the window; on 30 days that was 2,394 of
+    # 2,906 lists, and "the duel decks we pick should be the top CRL ones only".
+    # Then, for a short window: "even in 7 days it should be there ... if there
+    # is not, then go to top 1k or all duels". So the window's other duel lists
+    # join only when the CRL group fielded fewer than `DUEL_FALLBACK_BELOW`
+    # lists in it, at the 7.2 bars, and rank below CRL lists in the choosing
+    # (`DUEL_FALLBACK_PREFER` against `CRL_PREFER`).
+    duelw: dict = {}
+    if (len(crl) < DUEL_FALLBACK_BELOW and _duel_index is not None
+            and hasattr(_duel_index, "window_lists")):
+        try:
+            duelw = _duel_index.window_lists(
+                lo, hi, min_games=DUEL_LIST_MIN_GAMES, min_players=DUEL_LIST_MIN_PILOTS,
+                max_share=DUEL_LIST_MAX_SHARE)
+        except Exception:  # noqa: BLE001 - the other halves still stand
+            traceback.print_exc()
+            duelw = {}
+    for key, (n, w, pilots, arch) in duelw.items():
+        if key in crl:
+            continue
+        e = wanted.setdefault(key, {"arch": None, "meta": None, "state": None})
+        if not e.get("arch"):
+            e["arch"] = arch
+        e["duel"] = [n, w, pilots]
+    info["duelWindowLists"] = sum(1 for k in duelw if k not in crl)
+    info["duelFallback"] = bool(duelw)
 
     todo = []
     info["synergySkipped"] = 0

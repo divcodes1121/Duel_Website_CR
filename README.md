@@ -13687,6 +13687,28 @@ and "a super strong neural brain". Server 17:02 UTC, backups
   (~200 s for a 10-opponent scouting report) against nothing today. Not worth
   shipping as it stands.
 
+### Seven days too: a CRL list played once, and a fallback (2026-11-10)
+
+Asked: "even in 7 days it should be there, not only 30 days ... if there is not,
+then go to top 1k or all duels". Server 17:42 UTC, backups
+`team_analysis.py.bak-20261110-174237-precrl1game`.
+
+- **`CRL_MIN_GAMES` 2 -> 1** (and `CRL_SOLO_GAMES` 1): a list one of the CRL
+  group brought to a duel once in the window is in. 7 days: 142 -> 250 CRL
+  lists; 30 days 346 -> 582.
+- **Everyone's duels as a fallback**: the window's other duel lists (7.2 bars)
+  join only when the CRL group fielded fewer than `DUEL_FALLBACK_BELOW` 150
+  lists in the window, labelled Duel deck and preferred like a top 1,000 list
+  (`DUEL_FALLBACK_PREFER` 0, below `CRL_PREFER`). It does not read today.
+  Staged always on, figures were about a point higher but the CRL rows of the
+  top tens fell to a third, so it stays a fallback.
+- Staged before deploy (saved board 7 d / 10 opponents 7 d / 30 d): CRL rows in
+  the top tens 32 -> 67% / 48 -> 63% / 57 -> 77%, top threes 42 -> 61% / 43 ->
+  67% / 77 -> 87%, #1 62.9 -> 62.8 / 63.7 = / 65.4 -> 65.6, most one list
+  repeats unchanged. **Live on the saved board: 7 days 67% of the top tens and
+  61% of the top threes are CRL duel lists (4% this morning); 30 days 71% /
+  83%.**
+
 **The brains.** Unchanged: one brain per win condition rates its lists against
 each of the opponent's decks and keeps its top five (7.2); the main brain picks
 across win conditions. The pool change is what they choose from.

@@ -1980,6 +1980,8 @@ _saved5 = (ta._duel_index, ta._load_cohorts, ta.DUEL_POOL_COHORT, ta.dcx.seeds,
 ta._duel_index = _fake5
 ta._load_cohorts = lambda: {"crl": {"#TOP1", "#TOP2"}}
 ta.DUEL_POOL_COHORT = "crl"
+_FB_DEFAULT = ta.DUEL_FALLBACK_BELOW
+ta.DUEL_FALLBACK_BELOW = 0      # the fallback tier is tested on its own below
 ta.dcx.seeds = lambda: _seeds5
 ta._set_field_rates = lambda cands: 0
 ta._today = lambda: _dt5.date(2026, 10, 14)
@@ -1993,23 +1995,47 @@ try:
     check("a duel list nobody in the CRL group played is never in the pool, however played",
           _k(ST1) not in keys7 and i7.get("duelWindowLists") == 0
           and not any(c.duelw for c in p7), str(i7.get("duelWindowLists")))
+    # THE FALLBACK TIER (2026-11-10): when the CRL group fielded fewer than
+    # DUEL_FALLBACK_BELOW lists in the window, the window's other duel lists
+    # join, labelled duel, preferred below CRL lists.
+    _fb_saved = (ta.DUEL_FALLBACK_BELOW, ta.DUEL_FALLBACK_PREFER)
+    ta.DUEL_FALLBACK_BELOW, ta.DUEL_FALLBACK_PREFER = 1000, 2.0
+    ta._COMP_CACHE["by"], ta._COMP_CACHE["building"] = {}, set()
+    pf, if_ = ta._competitive_pool(7)
+    kf = {c.key: c for c in pf}
+    check("a thin CRL window lets the window's other duel lists in, labelled duel",
+          _k(ST1) in kf and kf[_k(ST1)].origin == "duel" and kf[_k(ST1)].duelw == [40, 25, 9]
+          and if_.get("duelFallback") is True and if_.get("duelWindowLists") == 1, str(ta._pool_public(if_)))
+    check("...preferred below a CRL list, above a top 1,000 list",
+          ta.use_bonus(kf[_k(ST1)]) == 2.0
+          and ta.use_bonus(kf[_k(CR1)]) > ta.use_bonus(kf[_k(ST1)])
+          and ta.use_bonus(types.SimpleNamespace(top=[40, 1, 1], crl=None, duelw=None)) == 0.0)
+    ta.DUEL_FALLBACK_BELOW = 3          # the window holds more CRL lists than this
+    ta._COMP_CACHE["by"], ta._COMP_CACHE["building"] = {}, set()
+    pg, ig = ta._competitive_pool(7)
+    check("...and a window with enough CRL lists reads no stranger's",
+          _k(ST1) not in {c.key for c in pg} and ig.get("duelFallback") is False, str(ta._pool_public(ig)))
+    ta.DUEL_FALLBACK_BELOW, ta.DUEL_FALLBACK_PREFER = _fb_saved
+    ta._COMP_CACHE["by"], ta._COMP_CACHE["building"] = {}, set()
     check("the group's lists of the window are read, for its tags, between the window's days",
           _gw_calls and _gw_calls[-1] == (("#TOP1", "#TOP2"), "20261008", "20261015"),
           str(_gw_calls[-1:]))
-    check("a list the group brought twice or more is in the pool, once is not",
-          _k(CR1) in keys7 and _k(CR2) in keys7 and _k(CR3) not in keys7
-          and ta.CRL_MIN_GAMES == 2, str(sorted(keys7)))
+    check("a list the group brought even once is in the pool (2026-11-10)",
+          _k(CR1) in keys7 and _k(CR2) in keys7 and _k(CR3) in keys7
+          and ta.CRL_MIN_GAMES == 1, str(sorted(keys7)))
+    check("the duel fallback reads below 150 CRL lists by default, preferred like a top list",
+          _FB_DEFAULT == 150 and ta.DUEL_FALLBACK_PREFER == 0.0)
     # 6.0-6.1 kept one player's short run out (2 pilots, else 20 games). SINCE
     # 2026-11-10 the CRL group is the only duel source, and any list one of
     # them came back to is in ("more duel decks ... top CRL only").
     check("one CRL player's list played twice or more is in (2026-11-10)",
           _k(CR5) in keys7 and _k(CR4) in keys7 and _k(CR6) in keys7, str(sorted(keys7)))
-    check("...and the bar is two games, whoever played them",
-          _k(CR2) in keys7 and ta.CRL_MIN_PILOTS == 2 and ta.CRL_SOLO_GAMES == 2,
+    check("...and the bar is one game, whoever played it",
+          _k(CR2) in keys7 and ta.CRL_MIN_PILOTS == 2 and ta.CRL_SOLO_GAMES == 1,
           str(sorted(keys7)))
-    check("the rule: two of the group, or two games",
+    check("the rule: two of the group, or one game",
           ta._crl_proven([2, 1, 2]) and ta._crl_proven([20, 3, 1])
-          and ta._crl_proven([2, 1, 1]) and not ta._crl_proven([1, 1, 1]))
+          and ta._crl_proven([1, 1, 1]) and not ta._crl_proven([0, 0, 0]))
     check("a list that cannot fill all three special slots is not, and is counted",
           _k(SH5) not in keys7 and i7["slotGaps"] == 1, str(i7.get("slotGaps")))
     check("the window's played vetted lists are in it; one fading out of it is not",
@@ -2028,8 +2054,8 @@ try:
           [c.key for c in p7][:3] == [_k(CR6), _k(CR1), _k(CR5)], str([c.key for c in p7]))
     check("the pool says what it holds, and over which days",
           i7["days"] == 7 and i7["from"] == "2026-10-08" and i7["to"] == "2026-10-14"
-          and i7["group"] == "crl" and i7["crlLists"] == 6 and i7["metaLists"] == 3
-          and i7["crlGames"] == 39 and i7["pool"] == 8 and i7["crlSkipped"] == 1
+          and i7["group"] == "crl" and i7["crlLists"] == 7 and i7["metaLists"] == 3
+          and i7["crlGames"] == 40 and i7["pool"] == 9 and i7["crlSkipped"] == 0
           and i7["topLists"] == 0 and i7["top"]["reason"] in ("no_file", "no_module"),
           str(ta._pool_public(i7)))
     check("...and a meta list's play in the window rides on its row (`states`)",
