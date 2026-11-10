@@ -4433,7 +4433,7 @@ figures equal the deck's `vs`); then **18/18 signed in on
 https://deckkies.com** for two players (live answer carries 20 lists and
 per-list rates, map figures equal the chips, pair record reads, no page
 errors). Screenshots `testing/flow-*.png`, `testing/live-flow-*.png`.
-Not yet on Team Analysis (its folders already hold `plays`/`threats`).
+**In Team Analysis too (same day, `d1beca4`)**, asked: "I cannot see this feature in team analysis, both scouting report and match plan". Every opened folder: a *Likely to bring* row (now a button), a **Matchup map** button beside that heading, or any suggested deck's **Matchups** button. A match plan picks whose decks make the right-hand column (*Your side*: Squad's best, or one teammate's own list; a teammate's Matchups button opens on that teammate). The column draws ten decks, plus the one it was opened on at its own rank, with **Show all N decks** (a teammate list runs 24-29). Folder rows carry their rates BY POSITION in the folder's `threats` (`vsAt`, ~0.45 kB a row) because keyed by list it is ~2.2 kB a row, ~3.7 MB on a 12v12; `bring()` turns it back into the keyed `vsLists` the Deck Counter reads. A live 2v2 match plan grew 560 -> ~620 kB. Verified 48/48 locally on live answers (both modes, both themes, 390) and 11/11 signed in on deckkies.com. Screenshots `testing/team-flow-*.png`, `testing/live-team-flow-*.png`.
 
 ### Deck vs Deck on both Deck Counters (2026-09-27)
 
