@@ -13655,6 +13655,38 @@ alone. No restart: the pool is keyed on the file. **The same group is the CRL
 group everywhere**: Coach Assist's CRL read and its routing, Coach Duel's CRL
 lists, 2v2 Decks' top players.
 
+### CRL duel decks first, and a neural model tested (2026-11-10, `7978a1b`)
+
+Asked: "focus on CRL duel decks more, I can still see top 1k lists more ... duel
+decks are not snipable and have a surprise factor, keeping top 1k in the list",
+and "a super strong neural brain". Server 17:02 UTC, backups
+`team_analysis.py.bak-20261110-170201-precrlprefer`.
+
+- **41% of the top tens were already CRL duel lists**, labelled "Top 1k list"
+  because a list in both sources took the top label. Now a list the CRL group
+  brought to duels is labelled CRL duel list.
+- **`CRL_PREFER` 5 points** (+ half a point a doubling of CRL players) in the
+  choosing only, never in the figure; the 6.1 frequency bonus for top 1,000
+  lists is gone (it rewarded the lists an opponent expects). Measured on 10
+  real opponents at 2 / 3 / 5 / 8 points; 5 chosen. 30 d (7 d): CRL in the top
+  tens 41% -> 57% (38 -> 48), top three 47% -> 77% (23 -> 43), #1 66.3 -> 65.4,
+  top ten 59.7 -> 59.6, rows beating every family 73 -> 76, max repeat 7 = 7.
+- **On the account holder's saved board** (12 players, 7 days), before today ->
+  now: strangers' duel lists 67% of the top tens -> 0, CRL 4% -> 33% (top three
+  8% -> 42%), #1 63.5 -> 62.9, top ten 58.6 -> 57.5, decks a folder 21 -> 17.5,
+  one list on 10 of 12 folders (was 8). At 30 days: CRL 8% -> 58% (top three
+  17% -> 75%), #1 63.9 -> 62.8. Seven days holds only 142 CRL lists.
+- **The neural model, measured and NOT built.** Card embeddings -> deck vectors
+  -> an interaction layer, antisymmetric, trained with Adam on the live
+  trainer's data (2.3M ladder rows + the oldest 70% of 738,565 duel games),
+  gradients checked numerically. On the newest 147,713 duel games (log loss,
+  lower is better): who is playing 0.6484, the live card model's form 0.6230,
+  neural 0.6235, both stacked 0.6197 (accuracy 64.6% -> 64.8%). CRL players'
+  1,872 games: 0.5483 / 0.5473 / 0.5458. The stack's gain (0.003) is what
+  boosted trees gave in October; scoring it costs 1.5 ms a pair in pure Python
+  (~200 s for a 10-opponent scouting report) against nothing today. Not worth
+  shipping as it stands.
+
 **The brains.** Unchanged: one brain per win condition rates its lists against
 each of the opponent's decks and keeps its top five (7.2); the main brain picks
 across win conditions. The pool change is what they choose from.
