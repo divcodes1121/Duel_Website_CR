@@ -1925,13 +1925,15 @@ redesigned".
 Probe notes: a panel is `[data-side][role="group"]`; walk every row into view before
 measuring (card images are `loading="lazy"`); the pager and the form strip are unchanged.
 
-### Watch the match (admins only, 2026-11-13)
+### Watch the match (2026-11-13)
 
-A violet **Watch** pill at the end of a Recent Battles row's header, after the
-time; admins only. It opens a dialog (scrim + panel, ProContact's pattern,
-portalled to the body), full height with the replay in it and only as tall as
-its step before one is dropped. The page under it is held still; the panel's
-body scrolls.
+A violet pill at the end of a Recent Battles row's header, after the time:
+**▶ Watch** (solid wash) on a battle with a shared replay, for everyone; **+
+Replay** (dashed, no wash) on the rest, for admins only. It opens a dialog
+(scrim + panel, ProContact's pattern, portalled to the body), full height with
+the replay in it and only as tall as its step before one is dropped. The page
+under it is held still; the panel's body scrolls. "Replay data: RoyaleAPI", a
+small underlined link in the dialog's head, credits the source.
 
 - **Colour says who** (blue the row's player, red the opponent) and violet is
   anything the reader moves (the playhead, the play button, chosen chips).
@@ -1944,6 +1946,8 @@ body scrolls.
 - **The cycle states are drawn, not written**: lit and lifted = in hand, dashed
   with a NEXT tag = next in, black and white with a number = played, back in
   that many plays; the hover title says each in words.
+- A viewer who is not an admin never sees an import control, Remove or Another
+  file — only the replay.
 - Motion is one-shot (a pin's pop and ripple, a played card's hop) and off under
   reduced motion; the only loop is playback's own animation frame, and only
   while playing.

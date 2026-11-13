@@ -403,9 +403,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* WATCH THE MATCH — admins only (the component draws it for nobody else).
+/* WATCH THE MATCH — on a battle with a shared replay, for everyone; an
+   admin also gets "+ Replay" on the rest (`data-add`, outlined, quieter).
    Violet, the colour of anything the reader moves; small, because it sits
-   on every row. */
+   on a row. */
 .watch {
   display: inline-flex;
   align-items: center;
@@ -431,6 +432,16 @@
   width: 0.8rem;
   height: 0.8rem;
   fill: currentColor;
+}
+
+.watch[data-add] {
+  border-style: dashed;
+  background: transparent;
+}
+
+.watch > span {
+  font-size: 0.9rem;
+  line-height: 0.8rem;
 }
 
 /* ------------------------------------------------------------ the pair */

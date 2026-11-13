@@ -24,10 +24,11 @@ import { FORM_SIZE, pageOf } from '../../utils/formStrip';
 import { DropIcon } from '../Dashboard/icons';
 import { initialsOf } from '../../utils/initials';
 import { useAccess } from '../../state/gate';
+import { battleKeyFor, fetchPlayerReplays } from '../../state/replayStore';
 
-/* "Watch the match" (2026-11-13). ADMIN ONLY: the button below is drawn for
-   an admin and nobody else. Lazy, so the replay player is fetched on the
-   first press and no other reader's page carries it. */
+/* "Watch the match" (2026-11-13). EVERYONE sees Watch on a battle that has
+   a replay in the shared library; an admin also sees "+ Replay" on the
+   rest, to import one. Lazy, so the player is fetched on the first press. */
 const WatchMatch = lazy(() => import('./Replay/WatchMatch'));
 
 /* Recent Battles — the raw log, newest first.
@@ -125,7 +126,15 @@ function shownTag(tag: string | undefined): string {
   return t.startsWith('#') ? t : `#${t}`;
 }
 
-function MatchHeader({ battle, onWatch }: { battle: RecentBattle; onWatch?: () => void }) {
+function MatchHeader({
+  battle,
+  onWatch,
+  hasReplay,
+}: {
+  battle: RecentBattle;
+  onWatch?: () => void;
+  hasReplay?: boolean;
+}) {
   const won = battle.result === 'win';
   const lost = battle.result === 'loss';
   return (
@@ -153,11 +162,21 @@ function MatchHeader({ battle, onWatch }: { battle: RecentBattle; onWatch?: () =
 
       <time className={styles.when}>{stamp(battle.battleTime, true)}</time>
       {onWatch && (
-        <button type="button" className={styles.watch} onClick={onWatch} title="Watch the match">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 5l11 7-11 7z" />
-          </svg>
-          Watch
+        <button
+          type="button"
+          className={styles.watch}
+          data-add={hasReplay ? undefined : ''}
+          onClick={onWatch}
+          title={hasReplay ? 'Watch the match' : 'Add this battle’s replay for everyone'}
+        >
+          {hasReplay ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 5l11 7-11 7z" />
+            </svg>
+          ) : (
+            <span aria-hidden="true">+</span>
+          )}
+          {hasReplay ? 'Watch' : 'Replay'}
         </button>
       )}
     </header>
@@ -295,16 +314,18 @@ function BattleRow({
   you,
   youTag,
   onWatch,
+  hasReplay,
 }: {
   battle: RecentBattle;
   you: string;
   youTag: string;
-  /** Admins only: opens the replay player over the list. */
+  /** Opens the replay player over the list (a shared replay, or an admin). */
   onWatch?: () => void;
+  hasReplay?: boolean;
 }) {
   return (
     <article className={styles.battle} data-outcome={battle.result} data-battle-id={battle.id}>
-      <MatchHeader battle={battle} onWatch={onWatch} />
+      <MatchHeader battle={battle} onWatch={onWatch} hasReplay={hasReplay} />
       <div className={styles.versus}>
         <PlayerDeckPanel side={battle.player} name={you} tag={youTag} who="mine" />
         <VsDivider />
@@ -332,10 +353,22 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
   /* A battle a pip asked to see. Held until the page holding it has loaded,
      then scrolled to and marked once. */
   const [jump, setJump] = useState<string | null>(null);
-  /* The battle being watched, admins only. Everyone else never gets a
-     button, so this stays null for them. */
-  const canWatch = useAccess() === 'admin';
+  /* Watch the match: which of this player's battles have a shared replay
+     (anyone may watch those), and whether the reader may add more. */
+  const canImport = useAccess() === 'admin';
+  const [shared, setShared] = useState<Set<string>>(() => new Set());
   const [watching, setWatching] = useState<RecentBattle | null>(null);
+  useEffect(() => {
+    let live = true;
+    setShared(new Set());
+    void fetchPlayerReplays(tag).then((keys) => {
+      if (live) setShared(new Set(keys));
+    });
+    return () => {
+      live = false;
+    };
+  }, [tag]);
+  const keyOf = (b: RecentBattle) => battleKeyFor(tag, b.opponent.tag, b.battleTime);
 
   /* The pager sits under the list, so the reader asks for the next page from
      the bottom of this one. Bring the top of the list back into view, or the
@@ -586,21 +619,45 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
               collection pass.
             </p>
           ) : (
-            report.battles.map((b) => (
-              <BattleRow
-                key={b.id}
-                battle={b}
-                you={you}
-                youTag={tag}
-                onWatch={canWatch ? () => setWatching(b) : undefined}
-              />
-            ))
+            report.battles.map((b) => {
+              const k = keyOf(b);
+              const has = k != null && shared.has(k);
+              return (
+                <BattleRow
+                  key={b.id}
+                  battle={b}
+                  you={you}
+                  youTag={tag}
+                  hasReplay={has}
+                  onWatch={has || (canImport && k != null) ? () => setWatching(b) : undefined}
+                />
+              );
+            })
           )}
         </section>
 
-        {canWatch && watching && (
+        {watching && (
           <Suspense fallback={null}>
-            <WatchMatch battle={watching} you={you} youTag={tag} onClose={() => setWatching(null)} />
+            <WatchMatch
+              battle={watching}
+              you={you}
+              youTag={tag}
+              shareKey={keyOf(watching)}
+              shared={(() => {
+                const k = keyOf(watching);
+                return k != null && shared.has(k);
+              })()}
+              canImport={canImport}
+              onShared={(k) => setShared((s) => new Set(s).add(k))}
+              onUnshared={(k) =>
+                setShared((s) => {
+                  const n = new Set(s);
+                  n.delete(k);
+                  return n;
+                })
+              }
+              onClose={() => setWatching(null)}
+            />
           </Suspense>
         )}
 

@@ -2,30 +2,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { RecentBattle } from '../../../state/analyticsClient';
 import { findReplayFor, keepReplay, replayFits } from '../../../state/replayLibrary';
+import { SHARE_PROBLEM_TEXT, fetchSharedReplay, shareReplay, unshareReplay } from '../../../state/replayStore';
 import { ReplayParseError, parseReplay, seenBy, stampToUnix, type Replay } from '../../../utils/replayParse';
 import { ReplayViewer } from './ReplayViewer';
 import styles from './Replay.module.css';
 
 /**
  * "Watch the match" — one Recent Battles row, played back on the arena plan.
- * ADMIN ONLY: the row draws the button only for an admin (RecentBattles.tsx).
  *
- * NO PAGE OF ITS OWN, on request: the battle is already on screen, so the
- * replay opens over it and closes back to it.
+ * FOR EVERYONE, FROM OUR SERVER. A battle with a replay in the shared library
+ * (`api/replays.ts`) plays for anybody who presses Watch, signed in or not —
+ * no RoyaleAPI, no file. The row only draws Watch for such a battle, unless
+ * the reader is an admin.
  *
- * THE FIRST TIME, IT NEEDS THE BATTLE'S REPLAY PAGE. Our stored battles carry
- * no replay (see `state/replayLibrary.ts`); RoyaleAPI's replay page does, and
- * RoyaleAPI refuses automated reads. So the dialog links to the player's
- * battles there and takes the saved page by drop or file picker. It is read on
- * this machine, checked against the row (the same two players, and the same
- * moment when the page says), kept in this browser and tied to the row — the
- * next press of Watch plays at once.
+ * AN ADMIN IMPORTS IT ONCE. Our stored battles carry no replay and RoyaleAPI
+ * refuses automated reads, so for a battle with no replay yet an admin sees
+ * "+ Replay": the dialog links to the player's battles on RoyaleAPI and takes
+ * the saved replay page (drop or file picker). It is read on the admin's
+ * machine, checked against the row, kept in this browser, and SHARED — from
+ * then on it is in everyone's Recent Battles. A replay this browser already
+ * held from before the library existed is shared the first time it is opened.
  *
- * ALWAYS FROM THE ROW'S SEAT: the searched player is blue at the bottom, as in
- * the row, whichever player's page the replay was saved from.
+ * ALWAYS FROM THE ROW'S SEAT: the searched player is blue at the bottom,
+ * whichever player's page the replay came from (`seenBy`).
  *
- * Lazy: the button's chunk loads on the first press, so nobody else's page
- * carries a line of it.
+ * Lazy: fetched on the first press of a Watch button.
  */
 
 const ACCEPT = '.html,.htm,.mhtml,.mht,text/html,multipart/related';
@@ -46,20 +47,33 @@ export function WatchMatch({
   battle,
   you,
   youTag,
+  shareKey,
+  shared,
+  canImport,
+  onShared,
+  onUnshared,
   onClose,
 }: {
   battle: RecentBattle;
   /** The searched player's name, as the row shows it. */
   you: string;
   youTag: string;
+  /** The battle's key in the shared library (`battleKeyFor`). */
+  shareKey: string | null;
+  /** The shared library holds this battle. */
+  shared: boolean;
+  /** An admin: may import, share and remove. */
+  canImport: boolean;
+  onShared: (key: string) => void;
+  onUnshared: (key: string) => void;
   onClose: () => void;
 }) {
   const unix = stampToUnix(battle.battleTime);
   const tags: [string, string] = [youTag, battle.opponent.tag];
-  const [replay, setReplay] = useState<Replay | null>(() => {
-    const kept = findReplayFor({ id: battle.id, tags, unix });
-    return kept ? seenBy(kept.replay, youTag) : null;
-  });
+  const [kept] = useState(() => findReplayFor({ id: battle.id, tags, unix }));
+  const [replay, setReplay] = useState<Replay | null>(() => (!shared && kept ? seenBy(kept.replay, youTag) : null));
+  const [isShared, setIsShared] = useState(shared);
+  const [loading, setLoading] = useState(shared);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
@@ -88,6 +102,50 @@ export function WatchMatch({
     };
   }, [onClose]);
 
+  /* A shared replay: from our server. Kept in this browser too, so a second
+     look costs nothing; the browser's copy stands in if the server fails. */
+  useEffect(() => {
+    if (!shared || !shareKey) return;
+    let live = true;
+    void fetchSharedReplay(shareKey).then((r) => {
+      if (!live) return;
+      if (r) {
+        keepReplay(r, Date.now(), battle.id);
+        setReplay(seenBy(r, youTag));
+      } else if (kept) {
+        setReplay(seenBy(kept.replay, youTag));
+      } else {
+        setError('This replay could not be loaded. Try again in a moment.');
+      }
+      setLoading(false);
+    });
+    return () => {
+      live = false;
+    };
+  }, [shared, shareKey, battle.id, youTag, kept]);
+
+  const share = useCallback(
+    async (r: Replay) => {
+      if (!canImport || !shareKey) return;
+      const out = await shareReplay(shareKey, r);
+      if (out.ok) {
+        setIsShared(true);
+        onShared(shareKey);
+      } else {
+        setNotice(SHARE_PROBLEM_TEXT[out.reason]);
+      }
+    },
+    [canImport, shareKey, onShared],
+  );
+
+  /* A replay this browser held before the shared library existed: an admin
+     opening it shares it, so the import they already did counts for everyone. */
+  useEffect(() => {
+    if (!shared && kept && canImport) void share(kept.replay);
+    // Once, on open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const openFile = useCallback(
     async (file: File | undefined | null) => {
       if (!file) return;
@@ -103,12 +161,15 @@ export function WatchMatch({
         }
         // Tie it to this row unless it is plainly another battle.
         keepReplay(parsed, Date.now(), fit === 'other-time' ? undefined : battle.id);
+        setReplay(seenBy(parsed, youTag));
         if (fit === 'other-time' && parsed.battleTime != null) {
-          setNotice(`This is another battle between the two of them, played ${day(parsed.battleTime)}.`);
-        } else if (fit === 'unknown-players') {
+          setNotice(`This is another battle between the two of them, played ${day(parsed.battleTime)} — not shared.`);
+          return;
+        }
+        if (fit === 'unknown-players') {
           setNotice('The page did not name its players, so it could not be checked against this battle.');
         }
-        setReplay(seenBy(parsed, youTag));
+        await share(parsed);
       } catch (e) {
         setError(e instanceof ReplayParseError ? e.message : 'That file could not be read.');
       } finally {
@@ -118,8 +179,18 @@ export function WatchMatch({
     },
     // `tags` is rebuilt each render from the same two strings.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [battle.id, youTag, battle.opponent.tag, unix],
+    [battle.id, youTag, battle.opponent.tag, unix, share],
   );
+
+  const remove = async () => {
+    if (!shareKey) return;
+    if (await unshareReplay(shareKey)) {
+      onUnshared(shareKey);
+      onClose();
+    } else {
+      setNotice('It could not be removed. Try again in a moment.');
+    }
+  };
 
   return createPortal(
     <div
@@ -138,7 +209,7 @@ export function WatchMatch({
         data-over={over ? '' : undefined}
         data-empty={replay ? undefined : ''}
         onDragOver={(e) => {
-          if (!e.dataTransfer.types.includes('Files')) return;
+          if (!canImport || !e.dataTransfer.types.includes('Files')) return;
           e.preventDefault();
           setOver(true);
         }}
@@ -147,6 +218,7 @@ export function WatchMatch({
           setOver(false);
         }}
         onDrop={(e) => {
+          if (!canImport) return;
           e.preventDefault();
           setOver(false);
           void openFile(e.dataTransfer.files?.[0]);
@@ -167,11 +239,25 @@ export function WatchMatch({
             <p className={styles.lede}>
               {replay
                 ? 'Space plays · ← → move a second · 1–5 set the speed · press any card to jump to it.'
-                : 'Open this battle on RoyaleAPI, press Replay, let it load, save the page (Ctrl+S) and drop it here.'}
+                : loading
+                  ? 'Loading the replay…'
+                  : canImport
+                    ? 'Open this battle on RoyaleAPI, press Replay, let it load, save the page (Ctrl+S) and drop it here — it is then shared with everyone.'
+                    : 'No replay for this battle yet.'}
             </p>
           </div>
           <div className={styles.headActions}>
-            {replay && (
+            {replay?.url && (
+              <a className={styles.source} href={replay.url} target="_blank" rel="noopener noreferrer">
+                Replay data: RoyaleAPI
+              </a>
+            )}
+            {canImport && isShared && replay && (
+              <button type="button" className={styles.ghostBtn} onClick={() => void remove()} title="Remove this replay for everyone">
+                Remove
+              </button>
+            )}
+            {canImport && replay && (
               <button type="button" className={styles.ghostBtn} onClick={() => fileRef.current?.click()}>
                 Another file
               </button>
@@ -180,13 +266,15 @@ export function WatchMatch({
               ×
             </button>
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept={ACCEPT}
-            hidden
-            onChange={(e) => void openFile(e.target.files?.[0])}
-          />
+          {canImport && (
+            <input
+              ref={fileRef}
+              type="file"
+              accept={ACCEPT}
+              hidden
+              onChange={(e) => void openFile(e.target.files?.[0])}
+            />
+          )}
         </header>
 
         {error && (
@@ -199,7 +287,9 @@ export function WatchMatch({
         <div className={styles.dialogBody}>
           {replay ? (
             <ReplayViewer key={replay.id} replay={replay} />
-          ) : (
+          ) : loading ? (
+            <p className={styles.loadingLine}>Loading the replay…</p>
+          ) : canImport ? (
             <div className={styles.fetchStep}>
               <a
                 className={styles.primaryBtn}
@@ -225,7 +315,7 @@ export function WatchMatch({
                 <span>or press to choose the file</span>
               </button>
             </div>
-          )}
+          ) : null}
         </div>
 
         {over && (

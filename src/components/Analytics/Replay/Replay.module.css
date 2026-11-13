@@ -80,6 +80,24 @@
   background: var(--neutral-wash);
 }
 
+/* Credit where the replay came from: the plays are RoyaleAPI's reading of
+   the battle, shown to everyone. */
+.source {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.loadingLine {
+  margin: 3rem 0;
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
 .notice {
   margin: 0.75rem 1.25rem 0;
   padding: 0.6rem 0.85rem;

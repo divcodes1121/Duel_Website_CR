@@ -399,13 +399,13 @@ describe('fitting a replay to a Recent Battles row', () => {
   });
 });
 
-describe('the Watch button is an admin button', () => {
+describe('the Watch button', () => {
   const src = readFileSync('src/components/Analytics/RecentBattles.tsx', 'utf8').replace(/\r\n/g, '\n');
 
-  it('is drawn only when the reader is an admin', () => {
-    expect(src).toContain("const canWatch = useAccess() === 'admin';");
-    expect(src).toContain('onWatch={canWatch ? () => setWatching(b) : undefined}');
-    expect(src).toContain('{canWatch && watching && (');
+  it('everyone gets Watch on a battle with a shared replay; only an admin can add one', () => {
+    expect(src).toContain("const canImport = useAccess() === 'admin';");
+    expect(src).toContain('onWatch={has || (canImport && k != null) ? () => setWatching(b) : undefined}');
+    expect(src).toContain('canImport={canImport}');
   });
 
   it('opens over the list, not as a page of its own', () => {
@@ -422,6 +422,7 @@ describe('the Watch button is an admin button', () => {
       'src/state/replayLibrary.ts',
       'src/components/Analytics/Replay/WatchMatch.tsx',
     ]) {
+      // Only state/replayStore.ts talks to a server, and only to our own /api/replays.
       const code = readFileSync(f, 'utf8');
       expect(code, f).not.toMatch(/\bfetch\(|XMLHttpRequest/);
       // A type from the API client is fine; a call into it is not.
