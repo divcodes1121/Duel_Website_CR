@@ -24,11 +24,12 @@ import { FORM_SIZE, pageOf } from '../../utils/formStrip';
 import { DropIcon } from '../Dashboard/icons';
 import { initialsOf } from '../../utils/initials';
 import { useAccess } from '../../state/gate';
-import { battleKeyFor, fetchPlayerReplays } from '../../state/replayStore';
+import { REPLAYS_FOR, battleKeyFor, fetchPlayerReplays } from '../../state/replayStore';
 
-/* "Watch the match" (2026-11-13). EVERYONE sees Watch on a battle that has
-   a replay in the shared library; an admin also sees "+ Replay" on the
-   rest, to import one. Lazy, so the player is fetched on the first press. */
+/* "Watch the match" (2026-11-13). ADMINS ONLY for now (`REPLAYS_FOR`): an
+   admin sees Watch on a battle with a replay in the shared library and
+   "+ Replay" on the rest; nobody else sees either. With REPLAYS_FOR set to
+   'everyone', Watch shows to all. Lazy: fetched on the first press. */
 const WatchMatch = lazy(() => import('./Replay/WatchMatch'));
 
 /* Recent Battles — the raw log, newest first.
@@ -356,18 +357,20 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
   /* Watch the match: which of this player's battles have a shared replay
      (anyone may watch those), and whether the reader may add more. */
   const canImport = useAccess() === 'admin';
+  const canWatch = canImport || REPLAYS_FOR === 'everyone';
   const [shared, setShared] = useState<Set<string>>(() => new Set());
   const [watching, setWatching] = useState<RecentBattle | null>(null);
   useEffect(() => {
-    let live = true;
     setShared(new Set());
+    if (!canWatch) return;
+    let live = true;
     void fetchPlayerReplays(tag).then((keys) => {
       if (live) setShared(new Set(keys));
     });
     return () => {
       live = false;
     };
-  }, [tag]);
+  }, [tag, canWatch]);
   const keyOf = (b: RecentBattle) => battleKeyFor(tag, b.opponent.tag, b.battleTime);
 
   /* The pager sits under the list, so the reader asks for the next page from
@@ -629,14 +632,14 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
                   you={you}
                   youTag={tag}
                   hasReplay={has}
-                  onWatch={has || (canImport && k != null) ? () => setWatching(b) : undefined}
+                  onWatch={canWatch && (has || (canImport && k != null)) ? () => setWatching(b) : undefined}
                 />
               );
             })
           )}
         </section>
 
-        {watching && (
+        {canWatch && watching && (
           <Suspense fallback={null}>
             <WatchMatch
               battle={watching}

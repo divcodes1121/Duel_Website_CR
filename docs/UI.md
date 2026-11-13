@@ -1928,8 +1928,9 @@ measuring (card images are `loading="lazy"`); the pager and the form strip are u
 ### Watch the match (2026-11-13)
 
 A violet pill at the end of a Recent Battles row's header, after the time:
-**▶ Watch** (solid wash) on a battle with a shared replay, for everyone; **+
-Replay** (dashed, no wash) on the rest, for admins only. It opens a dialog
+**▶ Watch** (solid wash) on a battle with a shared replay; **+ Replay**
+(dashed, no wash) on the rest. ADMINS ONLY for now (`REPLAYS_FOR`); with it
+set to 'everyone', Watch shows to every reader and + Replay stays an admin's. It opens a dialog
 (scrim + panel, ProContact's pattern, portalled to the body), full height with
 the replay in it and only as tall as its step before one is dropped. The page
 under it is held still; the panel's body scrolls. "Replay data: RoyaleAPI", a

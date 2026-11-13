@@ -7,6 +7,7 @@ vi.mock('../src/state/coachToken', () => ({ coachToken: async () => auth.token }
 import {
   REPLAYS_MAX_TOTAL,
   REPLAYS_PER_PLAYER,
+  REPLAYS_READ_BY,
   battleKey,
   cleanReplay,
   parseKey,
@@ -14,6 +15,7 @@ import {
   type ReplayKV,
 } from '../api/replays';
 import {
+  REPLAYS_FOR,
   REPLAYS_PER_PLAYER as CLIENT_PER_PLAYER,
   battleKeyFor,
   fetchPlayerReplays,
@@ -46,8 +48,15 @@ describe('the browser side', () => {
       answer = new Response('<html>404</html>', { status: 404 });
       expect(await shareReplay('K', { v: 1 } as Replay)).toEqual({ ok: false, reason: 'unreachable' });
 
-      // Locally /api does not run: a player simply has no shared replays.
+      // Reads carry the admin's token, and are not made without one.
+      answer = new Response(JSON.stringify({ battles: ['K1'] }), { status: 200 });
+      calls.length = 0;
+      expect(await fetchPlayerReplays('#2PP')).toEqual(['K1']);
+      expect((calls[0].init?.headers as Record<string, string>).Authorization).toBe('Bearer tok');
+      auth.token = null;
+      calls.length = 0;
       expect(await fetchPlayerReplays('#2PP')).toEqual([]);
+      expect(calls).toHaveLength(0);
     } finally {
       vi.unstubAllGlobals();
       auth.token = null;
@@ -71,6 +80,7 @@ function memoryKV(): ReplayKV & { data: Map<string, string> } {
 const ADMIN = { signedIn: true, isAdmin: async () => true };
 const MEMBER = { signedIn: true, isAdmin: async () => false };
 const NOBODY = { signedIn: false, isAdmin: async () => false };
+const ADMIN_READ = ADMIN;
 
 function replay(blue = '#PQ8RJ2Y0', red = '#9CVL2URG', plays = 20) {
   return {
@@ -114,6 +124,7 @@ describe('battle keys', () => {
     expect(parseKey(k)).toEqual({ tags: [B, A], stamp: '20261113T082741' });
     expect(parseKey(`${A}~${B}~20261113T082741`)).toBeNull(); // not sorted
     expect(CLIENT_PER_PLAYER).toBe(REPLAYS_PER_PLAYER);
+    expect(REPLAYS_FOR).toBe(REPLAYS_READ_BY);
   });
 });
 
@@ -139,26 +150,30 @@ describe('cleanReplay', () => {
 describe('the route', () => {
   const key = battleKey(A, B, '20261113T082741')!;
 
-  it('anyone reads; only a signed-in admin writes', async () => {
+  it('admins only, for now: reading and writing both need a signed-in admin', async () => {
+    expect(REPLAYS_READ_BY).toBe('admin');
     const kv = memoryKV();
-    expect((await replayRoute({ method: 'GET', player: A }, NOBODY, kv)).json).toEqual({ battles: [] });
+    expect((await replayRoute({ method: 'GET', player: A }, NOBODY, kv)).status).toBe(401);
+    expect((await replayRoute({ method: 'GET', player: A }, MEMBER, kv)).status).toBe(403);
+    expect((await replayRoute({ method: 'GET', key }, MEMBER, kv)).status).toBe(403);
+    expect((await replayRoute({ method: 'GET', player: A }, ADMIN_READ, kv)).json).toEqual({ battles: [] });
     expect((await replayRoute({ method: 'PUT', key, body: { replay: replay() } }, NOBODY, kv)).status).toBe(401);
     expect((await replayRoute({ method: 'PUT', key, body: { replay: replay() } }, MEMBER, kv)).status).toBe(403);
     expect((await replayRoute({ method: 'DELETE', key }, MEMBER, kv)).status).toBe(403);
     expect(kv.data.size).toBe(0);
   });
 
-  it('an admin shares a replay; everyone can then list and read it', async () => {
+  it('an admin shares a replay; an admin can then list and read it, never from an edge cache', async () => {
     const kv = memoryKV();
     const put = await replayRoute({ method: 'PUT', key, body: { replay: replay() } }, ADMIN, kv);
     expect(put.status).toBe(200);
     for (const tag of [A, B, `#${A}`]) {
-      expect((await replayRoute({ method: 'GET', player: tag }, NOBODY, kv)).json).toEqual({ battles: [key] });
+      expect((await replayRoute({ method: 'GET', player: tag }, ADMIN, kv)).json).toEqual({ battles: [key] });
     }
-    const got = await replayRoute({ method: 'GET', key }, NOBODY, kv);
+    const got = await replayRoute({ method: 'GET', key }, ADMIN, kv);
     expect(got.status).toBe(200);
     expect((got.json as { replay: { events: unknown[] } }).replay.events).toHaveLength(20);
-    expect(got.cache).toMatch(/public/);
+    expect(got.cache).toBe('private, no-store');
     // Stored compressed, not as the JSON that came in.
     expect(kv.data.get(`replay:${key}`)!.length).toBeLessThan(JSON.stringify(replay()).length);
   });
@@ -169,7 +184,7 @@ describe('the route', () => {
     expect((await replayRoute({ method: 'PUT', key, body: { replay: { v: 1 } } }, ADMIN, kv)).status).toBe(400);
     const other = await replayRoute({ method: 'PUT', key, body: { replay: replay('#2PP', '#8QQ') } }, ADMIN, kv);
     expect(other).toMatchObject({ status: 409, json: { error: 'other_players' } });
-    expect((await replayRoute({ method: 'GET', key }, NOBODY, kv)).status).toBe(404);
+    expect((await replayRoute({ method: 'GET', key }, ADMIN, kv)).status).toBe(404);
   });
 
   it(`each player keeps their ${REPLAYS_PER_PLAYER} newest; a replay nobody keeps is deleted`, async () => {
@@ -181,13 +196,13 @@ describe('the route', () => {
       const r = await replayRoute({ method: 'PUT', key: k, body: { replay: replay(`#${A}`, `#${opponents[i]}`) } }, ADMIN, kv);
       expect(r.status, `import ${i}`).toBe(200);
     }
-    const list = (await replayRoute({ method: 'GET', player: A }, NOBODY, kv)).json as { battles: string[] };
+    const list = (await replayRoute({ method: 'GET', player: A }, ADMIN, kv)).json as { battles: string[] };
     expect(list.battles).toHaveLength(REPLAYS_PER_PLAYER);
     expect(list.battles[0]).toContain(stamp(29)); // newest first
     // The five oldest are each still kept by their opponent (one replay each).
     const oldest = battleKey(A, opponents[0], stamp(0))!;
-    expect((await replayRoute({ method: 'GET', player: opponents[0] }, NOBODY, kv)).json).toEqual({ battles: [oldest] });
-    expect((await replayRoute({ method: 'GET', key: oldest }, NOBODY, kv)).status).toBe(200);
+    expect((await replayRoute({ method: 'GET', player: opponents[0] }, ADMIN, kv)).json).toEqual({ battles: [oldest] });
+    expect((await replayRoute({ method: 'GET', key: oldest }, ADMIN, kv)).status).toBe(200);
     expect(JSON.parse(kv.data.get('replays:total')!)).toBe(30);
   });
 
@@ -196,8 +211,8 @@ describe('the route', () => {
     for (let i = 0; i < 30; i += 1) {
       await replayRoute({ method: 'PUT', key: battleKey(A, B, stamp(i))!, body: { replay: replay() } }, ADMIN, kv);
     }
-    expect(((await replayRoute({ method: 'GET', player: B }, NOBODY, kv)).json as { battles: string[] }).battles).toHaveLength(25);
-    expect((await replayRoute({ method: 'GET', key: battleKey(A, B, stamp(0))! }, NOBODY, kv)).status).toBe(404);
+    expect(((await replayRoute({ method: 'GET', player: B }, ADMIN, kv)).json as { battles: string[] }).battles).toHaveLength(25);
+    expect((await replayRoute({ method: 'GET', key: battleKey(A, B, stamp(0))! }, ADMIN, kv)).status).toBe(404);
     expect(JSON.parse(kv.data.get('replays:total')!)).toBe(25);
     expect([...kv.data.keys()].filter((k) => k.startsWith('replay:'))).toHaveLength(25);
     // Older than all 25 kept: refused, nothing written.
@@ -213,8 +228,8 @@ describe('the route', () => {
     await replayRoute({ method: 'PUT', key, body: { replay: replay() } }, ADMIN, kv);
     expect(JSON.parse(kv.data.get('replays:total')!)).toBe(1);
     expect((await replayRoute({ method: 'DELETE', key }, ADMIN, kv)).json).toEqual({ removed: true });
-    expect((await replayRoute({ method: 'GET', player: A }, NOBODY, kv)).json).toEqual({ battles: [] });
-    expect((await replayRoute({ method: 'GET', key }, NOBODY, kv)).status).toBe(404);
+    expect((await replayRoute({ method: 'GET', player: A }, ADMIN, kv)).json).toEqual({ battles: [] });
+    expect((await replayRoute({ method: 'GET', key }, ADMIN, kv)).status).toBe(404);
     expect(JSON.parse(kv.data.get('replays:total')!)).toBe(0);
   });
 

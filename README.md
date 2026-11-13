@@ -54,7 +54,7 @@ bot's SQLite files read-only.
 | | |
 |---|---|
 | deck tools + analytics screens | shipped |
-| **Watch the match — a shared replay library** | **2026-11-13.** First shipped admin-only and per-browser (`cbf8350`); the same day, asked: "everyone can watch, all players", "store 25 replays per person", "no redirect to RoyaleAPI" for viewers. A battle in Recent Battles that has a replay now shows **▶ Watch to everyone**, signed in or not, and it plays from our server (`api/replays.ts`, Upstash) — no RoyaleAPI, no file. An admin sees **+ Replay** on the rest and imports a battle once from a saved RoyaleAPI replay page; it is then shared. Each player keeps their **25 newest**; a replay neither player keeps is deleted; a ceiling of 4,000 replays (~10 MB) over everything. A replay is stored deflated, **~2-3 KB** (measured: 61 plays = 9.2 KB JSON, 2.0 KB deflated). Writes are admin only (Supabase token + `effective_tier`), reads public; the body is rebuilt field by field. The board credits "Replay data: RoyaleAPI". Browser 18/18 against an in-memory stand-in for `/api/replays` (vite dev does not run it) + 19/19 for the player; 1,912 vitest. See [Watch the match](#watch-the-match-2026-11-13) |
+| **Watch the match — a shared replay library (admins only)** | **2026-11-13.** **ADMINS ONLY AGAIN, the same day** ("revert back to only admin"): one switch on each side, `REPLAYS_READ_BY` in `api/replays.ts` and `REPLAYS_FOR` in `state/replayStore.ts` (test-held equal), both `'admin'` — the Watch / + Replay buttons, the list read and the dialog are an admin's, and the API refuses a read without an admin's token (401 / 403) and is never edge-cached. Set both to `'everyone'` to open it again. First shipped admin-only and per-browser (`cbf8350`); the same day, asked: "everyone can watch, all players", "store 25 replays per person", "no redirect to RoyaleAPI" for viewers. A battle in Recent Battles that has a replay now shows **▶ Watch to everyone**, signed in or not, and it plays from our server (`api/replays.ts`, Upstash) — no RoyaleAPI, no file. An admin sees **+ Replay** on the rest and imports a battle once from a saved RoyaleAPI replay page; it is then shared. Each player keeps their **25 newest**; a replay neither player keeps is deleted; a ceiling of 4,000 replays (~10 MB) over everything. A replay is stored deflated, **~2-3 KB** (measured: 61 plays = 9.2 KB JSON, 2.0 KB deflated). Writes are admin only (Supabase token + `effective_tier`), reads public; the body is rebuilt field by field. The board credits "Replay data: RoyaleAPI". Browser 18/18 against an in-memory stand-in for `/api/replays` (vite dev does not run it) + 19/19 for the player; 1,912 vitest. See [Watch the match](#watch-the-match-2026-11-13) |
 | **Duel Analysis: day chips and a G1 / G2 / G3 order** | **LIVE 2026-11-09 as `743d679`, client only.** The date button and its menu are replaced by five chips in the header, 7D / 15D / 28D / 45D / 60D, opening on 28D. The combo table is ordered by G1 usage, with a G1 / G2 / G3 switch beside the table title to order it by another game's usage. Checked signed in on deckkies.com, 18/18, both themes, desktop and phone. See [Duel Analysis: day chips and a G1 / G2 / G3 order](#duel-analysis-day-chips-and-a-g1--g2--g3-order-2026-11-09) |
 | **2v2 Decks: top players' 2v2, 50 pairs per win condition** | **LIVE 2026-11-09 as `d821ac9`; server first** (backups `*.bak-20261109-041008-pretop`, royalweb only, bot PID unchanged). The day before (`b6e211f`) the screen became clan friendly 2v2 only, because ranked and clan friendly 2v2 share one mode string and the old all-time board was months-old ladder pairs. Then: "just top players' 2v2 decks". A 2v2 battle carries no skill signal, so a top player is the live Path of Legends top 1,000 plus the CRL list (~1,346 players, re-read hourly); every ranked or clan friendly 2v2 side with a top player in it counts, and the screen shows the 50 most-played pairs per win condition over 30 days, with a chip per win condition. Start: 729 battles (567 ranked, 162 friendly), 413 pairs. Raw 2v2 is kept only a day or two, so the window fills from the deploy. Live 14/14. See [2v2 Decks is top players' 2v2](#2v2-decks-is-top-players-2v2-50-pairs-per-win-condition-2026-11-09) and [2v2 Decks is clan friendly 2v2](#2v2-decks-is-clan-friendly-2v2-50-pairs-per-win-condition-2026-11-08) |
 | **Team Analysis: ten of their decks, varied suggestions** | **LIVE 2026-11-03; server first** (backups `*.bak-<stamp>-prets73`, royalweb only, bot PID unchanged). The first server deploy showed two faults, both fixed and redeployed before the site was pushed: the "Against what they play most" figure was blank (`vsPlay`/`vsMain` were not copied onto dressed rows, `_CHOSEN_KEYS`), and the card cap silently switched off when no ten rows could hold a card at three (now the tightest cap that can fill the top is used: live max 3-4, was 5). Opponent side: 10 decks with ranked / ladder / friendly / duel games each, and their real share of games beside "likely to bring". Suggestions: at most 2 builds per win condition, no card in more than 3 of the top ten, a usage weight toward decks that beat what they play most, and an "Against what they play most" block. Replayed on 160 opponents out of time: win conditions in a top ten 6.2 -> 8.2, most repeated list 35.6% -> 26.9%, card max 5.8 -> 3.3, for top three -0.4 and top ten -1.3. See [Ten of their decks](#ten-of-their-decks-and-suggestions-that-vary-2026-11-03) |
@@ -16902,8 +16902,16 @@ and 401 without a key.
 
 ### Watch the match (2026-11-13)
 
+**Admins only, for now.** It opened to everyone and went back to admins the
+same day ("revert back to only admin"). One switch on each side decides:
+`REPLAYS_READ_BY` in `api/replays.ts` and `REPLAYS_FOR` in
+`state/replayStore.ts`, both `'admin'` (a test holds them equal). While they
+are, nobody else sees a button, the list is not read for them, and the API
+answers a read without an admin's token 401 / 403 and is never cached at the
+edge. Set both to `'everyone'` and what follows is true for every reader.
+
 **What a reader sees.** In Recent Battles, a battle that has a replay carries
-a violet **▶ Watch** — for everyone, signed in or not. It opens a dialog over
+a violet **▶ Watch**. It opens a dialog over
 the list (`components/Analytics/Replay/WatchMatch.tsx`, lazy) that plays the
 battle on an arena plan, from our server: no RoyaleAPI, no file. An admin also
 sees a dashed **+ Replay** on every battle without one.
@@ -16928,8 +16936,8 @@ sees a dashed **+ Replay** on every battle without one.
 **The shared library** (`api/replays.ts`, a Vercel function on the Upstash
 database the saved decks use; `state/replayStore.ts` on the browser's side):
 
-    GET    /api/replays?player=TAG   -> { battles: [key, ...] }   anyone
-    GET    /api/replays?key=KEY      -> { replay }                anyone
+    GET    /api/replays?player=TAG   -> { battles: [key, ...] }   admin (REPLAYS_READ_BY)
+    GET    /api/replays?key=KEY      -> { replay }                admin (REPLAYS_READ_BY)
     PUT    /api/replays?key=KEY      { replay }                   admin
     DELETE /api/replays?key=KEY                                   admin
 

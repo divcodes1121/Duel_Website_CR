@@ -10,10 +10,10 @@ import styles from './Replay.module.css';
 /**
  * "Watch the match" — one Recent Battles row, played back on the arena plan.
  *
- * FOR EVERYONE, FROM OUR SERVER. A battle with a replay in the shared library
- * (`api/replays.ts`) plays for anybody who presses Watch, signed in or not —
- * no RoyaleAPI, no file. The row only draws Watch for such a battle, unless
- * the reader is an admin.
+ * FROM OUR SERVER. A battle with a replay in the shared library
+ * (`api/replays.ts`) plays straight away — no RoyaleAPI, no file. ADMINS
+ * ONLY for now (`REPLAYS_FOR` in state/replayStore.ts); set to 'everyone',
+ * the row draws Watch for anybody on a battle that has a replay.
  *
  * AN ADMIN IMPORTS IT ONCE. Our stored battles carry no replay and RoyaleAPI
  * refuses automated reads, so for a battle with no replay yet an admin sees

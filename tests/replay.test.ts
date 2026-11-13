@@ -402,9 +402,12 @@ describe('fitting a replay to a Recent Battles row', () => {
 describe('the Watch button', () => {
   const src = readFileSync('src/components/Analytics/RecentBattles.tsx', 'utf8').replace(/\r\n/g, '\n');
 
-  it('everyone gets Watch on a battle with a shared replay; only an admin can add one', () => {
+  it('admins only for now: no button, no read, no dialog for anyone else', () => {
     expect(src).toContain("const canImport = useAccess() === 'admin';");
-    expect(src).toContain('onWatch={has || (canImport && k != null) ? () => setWatching(b) : undefined}');
+    expect(src).toContain("const canWatch = canImport || REPLAYS_FOR === 'everyone';");
+    expect(src).toContain('if (!canWatch) return;');
+    expect(src).toContain('onWatch={canWatch && (has || (canImport && k != null)) ? () => setWatching(b) : undefined}');
+    expect(src).toContain('{canWatch && watching && (');
     expect(src).toContain('canImport={canImport}');
   });
 

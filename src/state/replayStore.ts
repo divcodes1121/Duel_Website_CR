@@ -1,9 +1,9 @@
 /**
  * The shared replay library, from the browser's side (`api/replays.ts`).
  *
- * Anyone reads: which of a player's battles have a replay, and a replay.
- * An admin writes: one import per battle, after which every viewer watches it
- * from our server — no RoyaleAPI, no file.
+ * Reads (which of a player's battles have a replay, and a replay) are an
+ * admin's while `REPLAYS_FOR` is 'admin'; writes always are. One import per
+ * battle, after which it plays from our server — no RoyaleAPI, no file.
  *
  * `/api/*` does not run under `vite dev`, so locally every read answers
  * "nothing shared" and every write reports itself unreachable; the screen
@@ -12,6 +12,10 @@
 
 import type { Replay } from '../utils/replayParse';
 import { coachToken } from './coachToken';
+
+/** WHO WATCHES: 'admin' (2026-11-13, "revert back to only admin") or
+ *  'everyone'. Same as the server's `REPLAYS_READ_BY` (test-held). */
+export const REPLAYS_FOR: 'admin' | 'everyone' = 'admin';
 
 /** Same as the server's `REPLAYS_PER_PLAYER` (a test holds them equal). */
 export const REPLAYS_PER_PLAYER = 25;
@@ -38,11 +42,21 @@ export function battleKeyFor(a: string, b: string, battleTime: string): string |
 }
 
 /** The battles of a player that have a shared replay. Empty on any failure. */
+/** The sign-in header a read carries while reads are an admin's; null when
+ *  such a read cannot be made (no session). */
+async function readHeaders(): Promise<Record<string, string> | null> {
+  if (REPLAYS_FOR === 'everyone') return {};
+  const token = await coachToken();
+  return token ? { Authorization: `Bearer ${token}` } : null;
+}
+
 export async function fetchPlayerReplays(tag: string): Promise<string[]> {
   const t = bareTag(tag);
   if (!t) return [];
+  const headers = await readHeaders();
+  if (!headers) return [];
   try {
-    const res = await fetch(`/api/replays?player=${t}`);
+    const res = await fetch(`/api/replays?player=${t}`, { headers });
     if (!res.ok) return [];
     const json = (await res.json()) as { battles?: unknown };
     return Array.isArray(json.battles) ? json.battles.filter((k): k is string => typeof k === 'string') : [];
@@ -52,8 +66,10 @@ export async function fetchPlayerReplays(tag: string): Promise<string[]> {
 }
 
 export async function fetchSharedReplay(key: string): Promise<Replay | null> {
+  const headers = await readHeaders();
+  if (!headers) return null;
   try {
-    const res = await fetch(`/api/replays?key=${encodeURIComponent(key)}`);
+    const res = await fetch(`/api/replays?key=${encodeURIComponent(key)}`, { headers });
     if (!res.ok) return null;
     const json = (await res.json()) as { replay?: Replay };
     return json.replay && json.replay.v === 1 ? json.replay : null;

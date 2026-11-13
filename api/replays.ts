@@ -11,8 +11,8 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
  * that player's Recent Battles can watch it, signed in or not, with no visit
  * to RoyaleAPI and no file.
  *
- *   GET    /api/replays?player=TAG   -> { battles: [key, ...] }  (anyone)
- *   GET    /api/replays?key=KEY      -> { replay }               (anyone)
+ *   GET    /api/replays?player=TAG   -> { battles: [key, ...] }  (admin; see REPLAYS_READ_BY)
+ *   GET    /api/replays?key=KEY      -> { replay }               (admin; see REPLAYS_READ_BY)
  *   PUT    /api/replays?key=KEY      { replay }                  (admin)
  *   DELETE /api/replays?key=KEY                                  (admin)
  *
@@ -44,6 +44,12 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 export const REPLAYS_PER_PLAYER = 25;
 export const REPLAYS_MAX_TOTAL = 4000;
+
+/** WHO MAY READ. 'admin' since 2026-11-13 ("revert back to only admin"),
+ *  the day it opened to everyone; 'everyone' opens the reads again. Same
+ *  value as the client's `REPLAYS_FOR` (a test holds them equal). Writes
+ *  are admin only either way. */
+export const REPLAYS_READ_BY: 'admin' | 'everyone' = 'admin';
 const MAX_JSON = 64_000;
 
 const TAG = /^[0289PYLQGRJCUV]{3,14}$/;
@@ -224,10 +230,19 @@ export async function replayRoute(
 ): Promise<ReplayResult> {
   const method = (req.method ?? 'GET').toUpperCase();
 
+  // Reads are an admin's too while REPLAYS_READ_BY says so — and then never
+  // cached at the edge, where a cached answer would skip this check.
+  const openReads = REPLAYS_READ_BY === 'everyone';
+  if (method === 'GET' && !openReads) {
+    if (!caller.signedIn) return { status: 401, json: { error: 'sign_in' } };
+    if (!(await caller.isAdmin())) return { status: 403, json: { error: 'admins_only' } };
+  }
+  const readCache = (edge: string) => (openReads ? edge : 'private, no-store');
+
   if (method === 'GET' && req.player != null) {
     const tag = bareTag(String(req.player));
     if (!tag) return { status: 400, json: { error: 'bad_player' } };
-    return { status: 200, json: { battles: await listOf(kv, tag) }, cache: 'public, s-maxage=15, stale-while-revalidate=60' };
+    return { status: 200, json: { battles: await listOf(kv, tag) }, cache: readCache('public, s-maxage=15, stale-while-revalidate=60') };
   }
 
   const parsed = parseKey(req.key);
@@ -237,7 +252,7 @@ export async function replayRoute(
   if (method === 'GET') {
     const replay = unpack(await kv.get(replayKey(key)));
     if (!replay) return { status: 404, json: { found: false } };
-    return { status: 200, json: { found: true, replay }, cache: 'public, s-maxage=300, stale-while-revalidate=600' };
+    return { status: 200, json: { found: true, replay }, cache: readCache('public, s-maxage=300, stale-while-revalidate=600') };
   }
 
   if (method !== 'PUT' && method !== 'DELETE') return { status: 405, json: { error: 'method' }, allow: 'GET, PUT, DELETE' };
@@ -323,7 +338,19 @@ async function userOf(token: string): Promise<string | null> {
   }
 }
 
+/* Remembered per warm container, as api/decks.ts does: "yes" for five
+   minutes, "no" for one — every Recent Battles view of an admin asks. */
+const adminSeen = new Map<string, { admin: boolean; until: number }>();
+
 async function isAdmin(userId: string, token: string): Promise<boolean> {
+  const hit = adminSeen.get(userId);
+  if (hit && hit.until > Date.now()) return hit.admin;
+  const admin = await askAdmin(userId, token);
+  adminSeen.set(userId, { admin, until: Date.now() + (admin ? 300_000 : 60_000) });
+  return admin;
+}
+
+async function askAdmin(userId: string, token: string): Promise<boolean> {
   try {
     if (!SUPABASE_URL || !SUPABASE_KEY) return false;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/effective_tier`, {
@@ -360,8 +387,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const header = String(req.headers?.authorization ?? '');
     const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length).trim() : '';
     const method = (req.method ?? 'GET').toUpperCase();
-    // Only a write needs to know who is calling.
-    const userId = method === 'GET' ? null : await userOf(token);
+    // A read needs to know who is calling only while reads are an admin's.
+    const userId = method === 'GET' && REPLAYS_READ_BY === 'everyone' ? null : await userOf(token);
     const out = await replayRoute(
       { method, player: req.query?.player, key: req.query?.key, body: req.body },
       { signedIn: userId != null, isAdmin: () => (userId ? isAdmin(userId, token) : Promise.resolve(false)) },
