@@ -1,5 +1,5 @@
 import { useScreenExport } from '../Export/ExportButton';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { useRemembered } from '../../hooks/useRemembered';
 import { isPage } from '../../state/listMemory';
 import { CardArt } from './CardArt';
@@ -23,6 +23,12 @@ import { FormStrip } from './FormStrip';
 import { FORM_SIZE, pageOf } from '../../utils/formStrip';
 import { DropIcon } from '../Dashboard/icons';
 import { initialsOf } from '../../utils/initials';
+import { useAccess } from '../../state/gate';
+
+/* "Watch the match" (2026-11-13). ADMIN ONLY: the button below is drawn for
+   an admin and nobody else. Lazy, so the replay player is fetched on the
+   first press and no other reader's page carries it. */
+const WatchMatch = lazy(() => import('./Replay/WatchMatch'));
 
 /* Recent Battles — the raw log, newest first.
  *
@@ -119,7 +125,7 @@ function shownTag(tag: string | undefined): string {
   return t.startsWith('#') ? t : `#${t}`;
 }
 
-function MatchHeader({ battle }: { battle: RecentBattle }) {
+function MatchHeader({ battle, onWatch }: { battle: RecentBattle; onWatch?: () => void }) {
   const won = battle.result === 'win';
   const lost = battle.result === 'loss';
   return (
@@ -146,6 +152,14 @@ function MatchHeader({ battle }: { battle: RecentBattle }) {
       </span>
 
       <time className={styles.when}>{stamp(battle.battleTime, true)}</time>
+      {onWatch && (
+        <button type="button" className={styles.watch} onClick={onWatch} title="Watch the match">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 5l11 7-11 7z" />
+          </svg>
+          Watch
+        </button>
+      )}
     </header>
   );
 }
@@ -276,10 +290,21 @@ function VsDivider() {
   );
 }
 
-function BattleRow({ battle, you, youTag }: { battle: RecentBattle; you: string; youTag: string }) {
+function BattleRow({
+  battle,
+  you,
+  youTag,
+  onWatch,
+}: {
+  battle: RecentBattle;
+  you: string;
+  youTag: string;
+  /** Admins only: opens the replay player over the list. */
+  onWatch?: () => void;
+}) {
   return (
     <article className={styles.battle} data-outcome={battle.result} data-battle-id={battle.id}>
-      <MatchHeader battle={battle} />
+      <MatchHeader battle={battle} onWatch={onWatch} />
       <div className={styles.versus}>
         <PlayerDeckPanel side={battle.player} name={you} tag={youTag} who="mine" />
         <VsDivider />
@@ -307,6 +332,10 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
   /* A battle a pip asked to see. Held until the page holding it has loaded,
      then scrolled to and marked once. */
   const [jump, setJump] = useState<string | null>(null);
+  /* The battle being watched, admins only. Everyone else never gets a
+     button, so this stays null for them. */
+  const canWatch = useAccess() === 'admin';
+  const [watching, setWatching] = useState<RecentBattle | null>(null);
 
   /* The pager sits under the list, so the reader asks for the next page from
      the bottom of this one. Bring the top of the list back into view, or the
@@ -557,9 +586,23 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
               collection pass.
             </p>
           ) : (
-            report.battles.map((b) => <BattleRow key={b.id} battle={b} you={you} youTag={tag} />)
+            report.battles.map((b) => (
+              <BattleRow
+                key={b.id}
+                battle={b}
+                you={you}
+                youTag={tag}
+                onWatch={canWatch ? () => setWatching(b) : undefined}
+              />
+            ))
           )}
         </section>
+
+        {canWatch && watching && (
+          <Suspense fallback={null}>
+            <WatchMatch battle={watching} you={you} youTag={tag} onClose={() => setWatching(null)} />
+          </Suspense>
+        )}
 
         <footer className={styles.foot}>
           {/* Numbered rather than "load more": the log is ordered by time, and

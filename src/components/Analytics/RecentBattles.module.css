@@ -403,6 +403,36 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* WATCH THE MATCH — admins only (the component draws it for nobody else).
+   Violet, the colour of anything the reader moves; small, because it sits
+   on every row. */
+.watch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.6rem 0.22rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--violet-edge);
+  background: var(--violet-wash);
+  color: var(--hue-violet);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+
+.watch:hover {
+  background: var(--violet-fill);
+  transform: translateY(-1px);
+}
+
+.watch svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  fill: currentColor;
+}
+
 /* ------------------------------------------------------------ the pair */
 
 /* STACKED IS THE BASE; ABREAST IS THE CONTAINER QUERY FURTHER DOWN.
