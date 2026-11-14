@@ -4546,8 +4546,11 @@ first set now leads with counters too (`coach_duel._side`; 109 tests green).
 
 **Browser**: 20/20 twice on staged real answers (two pairs), plus the map
 (41/41). Screenshots `testing/coach-pattern-*.png`, `coach-suggest-*.png`.
-Release note `2026-11-14-coach-pattern`. **Not deployed; not seen signed in
-on deckkies.com.**
+Release note `2026-11-14-coach-pattern`. **LIVE as `6829d3d`** (server first,
+13:59 UTC, backups `*.bak-20261114-135905-precoachpattern`, royalweb only, bot
+PID unchanged; VPS suites green). **13/13 signed in on https://deckkies.com**
+(both windows, the pattern, counters first, own duel decks, switches, the map,
+every card image loading). Screenshots `testing/live-coach-*.png`.
 
 ### The matchup map in Coach Assist (2026-11-14)
 
@@ -4619,8 +4622,9 @@ the map opens, cached in the browser for the visit. Staged: 0.4-2 s warm,
 to a local vite with no Supabase (admin). Covered: both windows, dark/light
 1440, 390 touch both themes; map figures == the server's; chips == `vsAt`;
 the column changes per deck with no second request; nothing holding a spent
-card. Screenshots `testing/coach-flow-*.png`. **Not yet deployed; not seen
-signed in on deckkies.com.**
+card. Screenshots `testing/coach-flow-*.png`. **LIVE as `6829d3d`** with the
+pattern above; the live route answered 8 of his decks x 22 win conditions in
+5.9 s, and the map opened signed in on deckkies.com.
 
 ### Deck vs Deck on both Deck Counters (2026-09-27)
 
