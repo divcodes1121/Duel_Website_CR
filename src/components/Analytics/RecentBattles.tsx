@@ -1,5 +1,5 @@
 import { useScreenExport } from '../Export/ExportButton';
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRemembered } from '../../hooks/useRemembered';
 import { isPage } from '../../state/listMemory';
 import { CardArt } from './CardArt';
@@ -23,14 +23,6 @@ import { FormStrip } from './FormStrip';
 import { FORM_SIZE, pageOf } from '../../utils/formStrip';
 import { DropIcon } from '../Dashboard/icons';
 import { initialsOf } from '../../utils/initials';
-import { useAccess } from '../../state/gate';
-import { REPLAYS_FOR, battleKeyFor, fetchPlayerReplays } from '../../state/replayStore';
-
-/* "Watch the match" (2026-11-13). ADMINS ONLY for now (`REPLAYS_FOR`): an
-   admin sees Watch on a battle with a replay in the shared library and
-   "+ Replay" on the rest; nobody else sees either. With REPLAYS_FOR set to
-   'everyone', Watch shows to all. Lazy: fetched on the first press. */
-const WatchMatch = lazy(() => import('./Replay/WatchMatch'));
 
 /* Recent Battles — the raw log, newest first.
  *
@@ -127,15 +119,7 @@ function shownTag(tag: string | undefined): string {
   return t.startsWith('#') ? t : `#${t}`;
 }
 
-function MatchHeader({
-  battle,
-  onWatch,
-  hasReplay,
-}: {
-  battle: RecentBattle;
-  onWatch?: () => void;
-  hasReplay?: boolean;
-}) {
+function MatchHeader({ battle }: { battle: RecentBattle }) {
   const won = battle.result === 'win';
   const lost = battle.result === 'loss';
   return (
@@ -162,24 +146,6 @@ function MatchHeader({
       </span>
 
       <time className={styles.when}>{stamp(battle.battleTime, true)}</time>
-      {onWatch && (
-        <button
-          type="button"
-          className={styles.watch}
-          data-add={hasReplay ? undefined : ''}
-          onClick={onWatch}
-          title={hasReplay ? 'Watch the match' : 'Add this battle’s replay for everyone'}
-        >
-          {hasReplay ? (
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5l11 7-11 7z" />
-            </svg>
-          ) : (
-            <span aria-hidden="true">+</span>
-          )}
-          {hasReplay ? 'Watch' : 'Replay'}
-        </button>
-      )}
     </header>
   );
 }
@@ -310,23 +276,10 @@ function VsDivider() {
   );
 }
 
-function BattleRow({
-  battle,
-  you,
-  youTag,
-  onWatch,
-  hasReplay,
-}: {
-  battle: RecentBattle;
-  you: string;
-  youTag: string;
-  /** Opens the replay player over the list (a shared replay, or an admin). */
-  onWatch?: () => void;
-  hasReplay?: boolean;
-}) {
+function BattleRow({ battle, you, youTag }: { battle: RecentBattle; you: string; youTag: string }) {
   return (
     <article className={styles.battle} data-outcome={battle.result} data-battle-id={battle.id}>
-      <MatchHeader battle={battle} onWatch={onWatch} hasReplay={hasReplay} />
+      <MatchHeader battle={battle} />
       <div className={styles.versus}>
         <PlayerDeckPanel side={battle.player} name={you} tag={youTag} who="mine" />
         <VsDivider />
@@ -354,24 +307,6 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
   /* A battle a pip asked to see. Held until the page holding it has loaded,
      then scrolled to and marked once. */
   const [jump, setJump] = useState<string | null>(null);
-  /* Watch the match: which of this player's battles have a shared replay
-     (anyone may watch those), and whether the reader may add more. */
-  const canImport = useAccess() === 'admin';
-  const canWatch = canImport || REPLAYS_FOR === 'everyone';
-  const [shared, setShared] = useState<Set<string>>(() => new Set());
-  const [watching, setWatching] = useState<RecentBattle | null>(null);
-  useEffect(() => {
-    setShared(new Set());
-    if (!canWatch) return;
-    let live = true;
-    void fetchPlayerReplays(tag).then((keys) => {
-      if (live) setShared(new Set(keys));
-    });
-    return () => {
-      live = false;
-    };
-  }, [tag, canWatch]);
-  const keyOf = (b: RecentBattle) => battleKeyFor(tag, b.opponent.tag, b.battleTime);
 
   /* The pager sits under the list, so the reader asks for the next page from
      the bottom of this one. Bring the top of the list back into view, or the
@@ -622,47 +557,9 @@ export function RecentBattles({ tag, season = 'Current Season' }: { tag: string;
               collection pass.
             </p>
           ) : (
-            report.battles.map((b) => {
-              const k = keyOf(b);
-              const has = k != null && shared.has(k);
-              return (
-                <BattleRow
-                  key={b.id}
-                  battle={b}
-                  you={you}
-                  youTag={tag}
-                  hasReplay={has}
-                  onWatch={canWatch && (has || (canImport && k != null)) ? () => setWatching(b) : undefined}
-                />
-              );
-            })
+            report.battles.map((b) => <BattleRow key={b.id} battle={b} you={you} youTag={tag} />)
           )}
         </section>
-
-        {canWatch && watching && (
-          <Suspense fallback={null}>
-            <WatchMatch
-              battle={watching}
-              you={you}
-              youTag={tag}
-              shareKey={keyOf(watching)}
-              shared={(() => {
-                const k = keyOf(watching);
-                return k != null && shared.has(k);
-              })()}
-              canImport={canImport}
-              onShared={(k) => setShared((s) => new Set(s).add(k))}
-              onUnshared={(k) =>
-                setShared((s) => {
-                  const n = new Set(s);
-                  n.delete(k);
-                  return n;
-                })
-              }
-              onClose={() => setWatching(null)}
-            />
-          </Suspense>
-        )}
 
         <footer className={styles.foot}>
           {/* Numbered rather than "load more": the log is ordered by time, and

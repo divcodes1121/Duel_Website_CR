@@ -1925,34 +1925,6 @@ redesigned".
 Probe notes: a panel is `[data-side][role="group"]`; walk every row into view before
 measuring (card images are `loading="lazy"`); the pager and the form strip are unchanged.
 
-### Watch the match (2026-11-13)
-
-A violet pill at the end of a Recent Battles row's header, after the time:
-**▶ Watch** (solid wash) on a battle with a shared replay; **+ Replay**
-(dashed, no wash) on the rest. ADMINS ONLY for now (`REPLAYS_FOR`); with it
-set to 'everyone', Watch shows to every reader and + Replay stays an admin's. It opens a dialog
-(scrim + panel, ProContact's pattern, portalled to the body), full height with
-the replay in it and only as tall as its step before one is dropped. The page
-under it is held still; the panel's body scrolls. "Replay data: RoyaleAPI", a
-small underlined link in the dialog's head, credits the source.
-
-- **Colour says who** (blue the row's player, red the opponent) and violet is
-  anything the reader moves (the playhead, the play button, chosen chips).
-- **Each player sits by their own half**: blue's panel hangs at the bottom of
-  its column, red's at the top. Narrow: red / board / blue, stacked.
-- **The board is sized from the window's height** so the transport stays in
-  view at 900px tall (`(100vh - 23rem) * 0.578`, 16-27rem).
-- **Text-light**: one line under the title says what to do — before a file,
-  how to get the page; after, the keys. Figures are labelled, nothing explained.
-- **The cycle states are drawn, not written**: lit and lifted = in hand, dashed
-  with a NEXT tag = next in, black and white with a number = played, back in
-  that many plays; the hover title says each in words.
-- A viewer who is not an admin never sees an import control, Remove or Another
-  file — only the replay.
-- Motion is one-shot (a pin's pop and ripple, a played card's hop) and off under
-  reduced motion; the only loop is playback's own animation frame, and only
-  while playing.
-
 ## The scroll rail (2026-10-03)
 
 The site's scroller, on every screen: a rail of ticks, the lit violet run being the part of
