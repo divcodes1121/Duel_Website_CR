@@ -19,6 +19,19 @@
  */
 import type { PlaysFamily, TeamRecommendation, TeamThreat } from '../state/analyticsClient';
 
+/* WHAT THE MAP READS, and nothing more (2026-11-14): Team Analysis and the
+   Deck Counter hand it their own rows; Coach Assist builds these from its
+   predicted decks and `coach.answers` (`utils/coachFlow.ts`). */
+export type FlowFamily = Pick<PlaysFamily, 'family' | 'name' | 'share' | 'games' | 'decks'>;
+export type FlowThreat = Pick<
+  TeamThreat,
+  'key' | 'cards' | 'art' | 'artInferred' | 'archetype' | 'name' | 'likelihood' | 'observedCount' | 'family'
+>;
+export type FlowDeck = Pick<
+  TeamRecommendation,
+  'key' | 'cards' | 'art' | 'artInferred' | 'artFilled' | 'name' | 'expectedWinRate' | 'vs' | 'vsLists' | 'vsAt'
+>;
+
 /** What the map is centred on: one of their families, or one of our decks. */
 export type FlowFocus = { side: 'their'; id: string } | { side: 'ours'; id: string };
 
@@ -84,7 +97,7 @@ export interface TheirNode {
 export interface OurNode {
   id: string;
   rank: number;
-  deck: TeamRecommendation;
+  deck: FlowDeck;
 }
 
 /** One deck of ours against one family of theirs. */
@@ -141,14 +154,14 @@ export const FLOW_MAX_FAMILIES = 10;
 export const FLOW_MAX_DECKS = 10;
 
 export function buildFlow(
-  plays: PlaysFamily[],
-  threats: TeamThreat[] | undefined,
-  decks: TeamRecommendation[],
+  plays: FlowFamily[],
+  threats: FlowThreat[] | undefined,
+  decks: FlowDeck[],
   /** Draw the first `limit` decks, plus `keep` wherever it sits in the list
    *  (the deck the map was opened on). Ranks stay the list's own. */
   opts: { limit?: number; keep?: string } = {},
 ): FlowModel {
-  const byFamily = new Map<string, TeamThreat[]>();
+  const byFamily = new Map<string, FlowThreat[]>();
   /* A Team Analysis row carries its rates by position in `threats` (`vsAt`),
      the Deck Counter's keyed by list (`vsLists`). */
   const position = new Map((threats ?? []).map((t, i) => [t.key, i]));

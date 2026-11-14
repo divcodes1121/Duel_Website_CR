@@ -1552,6 +1552,62 @@ export interface CoachDeck {
     card: string; name: string; share?: number; winRate?: number; games?: number;
     use?: 'main' | 'regular' | 'rare'; tag?: 'strong' | 'even' | 'weak' | null; new?: boolean;
   };
+  /** On their decks read off the PATTERN (2026-11-14): the win condition it
+   *  is filed under, and how much of its chance came from his ranked and
+   *  friendly play rather than his duels (0..1). `pattern: 'play'` = a deck
+   *  only his play showed. */
+  family?: string;
+  familyName?: string;
+  fromPlay?: number;
+  pattern?: 'play';
+  /** On suggested decks (2026-11-14): one-card changes real duel players made
+   *  to this list that the combined brain says help here, best first … */
+  switches?: CoachSwitch[];
+  /** One of the coached player's own duel decks (`yourDecks`). */
+  yours?: boolean;
+  /** … and Deckkies' builder's best change to it (human swaps, judged by the
+   *  combined brain against this deck), when it was built from. */
+  built?: CoachBuiltSwitch;
+}
+
+export interface CoachSwitch {
+  out: string;
+  in: string;
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  /** The changed deck's win chance, and how much it adds. */
+  winRate: number;
+  gain: number;
+  games?: number | null;
+  players?: number | null;
+  source: 'duel';
+}
+
+export interface CoachBuiltSwitch {
+  cards: string[];
+  art: Record<string, WildForm>;
+  inferredArt?: boolean;
+  name: string;
+  win: number;
+  gain: number;
+  swaps: { out: string; in: string; pairs?: number }[];
+  source: 'brain';
+}
+
+/** WHAT HE IS LIKELY TO BRING, AS NUMBERS (`coach._pattern`, 2026-11-14): the
+ *  duel read's whole distribution and his window's play, half each, by win
+ *  condition — and every card's chance by role over the same. */
+export interface CoachPattern {
+  brain: string;
+  families: { family: string; name: string; share: number; read: number; play: number; lists: number }[];
+  cards: Partial<Record<CoachRole, { card: string; prob: number }[]>>;
+  /** How much of the pattern is his duels and how much his play. */
+  seen: number;
+  fromPlay: number;
+  /** The share of it the decks listed stand for. */
+  covered: number;
+  lists: number;
 }
 
 /** One win condition of a player's profile (`coach._win_con_profile`). */
@@ -1730,6 +1786,8 @@ export interface CoachPrediction {
   /** The chance their next deck is one NOT seen in the window. */
   newDeck?: number;
   left?: CoachLeft;
+  /** His pattern: the numbers behind the list (2026-11-14). */
+  pattern?: CoachPattern | null;
 }
 
 export interface CoachSuggestion {
@@ -1749,6 +1807,7 @@ export interface CoachSuggestion {
     decks: CoachDeck[]; source: string; nCandidates: number;
     /** As on `CoachPrediction`: present when the fitted duel read answered. */
     engine?: string; newDeck?: number; left?: CoachLeft;
+    pattern?: CoachPattern | null;
   };
   recommendations: CoachDeck[];
   best: CoachDeck | null;
@@ -1789,6 +1848,9 @@ export interface CoachSuggestion {
   /** One-card changes real duel players made to "Play this" that raise its
    *  win chance against this opponent. */
   brainSwaps?: CoachBrainSwap[];
+  /** The coached player's own duel decks in the window, legal now, rated like
+   *  the options — whether or not they made the list (2026-11-14). */
+  yourDecks?: CoachDeck[];
   /** Decks Deckkies built for this duel by human swaps, and the loadout for
    *  the whole best-of-3 (`server/deck_builder.py`). Pro's tool, same opt-in
    *  as `tuner`; null when nothing could be built. */
@@ -2121,6 +2183,74 @@ export function fetchCoachSuggestion(
      and moves the chance of the next game. Left out, the server weighs both. */
   if (results) q.set('res', results);
   return get<CoachSuggestion>(`/api/analytics/coach/suggest?${q.toString()}`);
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+   COACH ASSIST'S MATCHUP MAP (2026-11-14, `coach.answers`)
+   ────────────────────────────────────────────────────────────────────────
+   For each deck of theirs on screen, the best list of EVERY win condition
+   against THAT deck — so the answers change with the deck — each carrying its
+   rate against every other deck of theirs. Asked only when the map opens. */
+
+/** One deck on the right of the map. */
+export interface CoachAnswerDeck {
+  key: string;
+  /** SEATED, every special slot its cards can fill. */
+  cards: string[];
+  art: Record<string, WildForm>;
+  artInferred?: boolean;
+  artFilled?: string[];
+  archetype: string;
+  /** The win condition it is filed under (Team Analysis's families). */
+  family: string;
+  familyName: string;
+  name: string;
+  avgElixir: number;
+  /** `yours` = one of the coached player's own duel decks, `option` = an
+   *  option the screen showed; the rest are the pool's (`crl` the CRL group's
+   *  duel lists, `top` the live top 1,000's, `duel` other duel lists). */
+  origin: 'yours' | 'option' | 'crl' | 'top' | 'duel' | 'meta' | 'ladder';
+  /** Against their decks, weighted by the chance of each, over the decks it
+   *  has a rate against (`weight` of the chance). */
+  expectedWinRate: number;
+  weight: number;
+  /** `[rate, rung, games]` against each deck of theirs, by position in
+   *  `CoachAnswers.their`; null where nothing was measured — never 50. */
+  vsAt: ([number, string | null, number] | null)[];
+  /** An option the screen asked to keep on the map. */
+  keep?: boolean;
+  /** Times the player brought it, for their own duel decks. */
+  count?: number;
+  crlPilots?: number;
+}
+
+export interface CoachAnswers {
+  brain: string;
+  /** Their decks the server rated, in order: `at` = position in what was
+   *  sent, `likelihood` = its chance over all of them. */
+  their: { key: string; at: number; likelihood: number }[];
+  decks: CoachAnswerDeck[];
+  /** Per deck of theirs: indices into `decks`, one per win condition, best
+   *  rate against THAT deck first. */
+  answers: number[][];
+  pool: { decks: number; own: number; rated: number; window?: PoolWindow | null;
+          cardModel?: string | null } | null;
+  reason: string | null;
+  seconds?: number;
+}
+
+export function fetchCoachAnswers(
+  their: { cards: string[]; weight: number }[],
+  opts: { me?: string; myPlayed?: string[][]; keep?: string[][]; days?: number } = {},
+): Promise<CoachAnswers> {
+  const q = new URLSearchParams();
+  their.slice(0, 8).forEach((d, i) => q.set(`t${i + 1}`, d.cards.join(',')));
+  q.set('w', their.slice(0, 8).map((d) => d.weight.toFixed(4)).join(','));
+  if (opts.me) q.set('me', opts.me);
+  (opts.myPlayed ?? []).slice(0, 2).forEach((d, i) => q.set(`m${i + 1}`, d.join(',')));
+  (opts.keep ?? []).slice(0, 8).forEach((d, i) => q.set(`y${i + 1}`, d.join(',')));
+  if (opts.days) q.set('days', String(opts.days));
+  return get<CoachAnswers>(`/api/analytics/coach/answers?${q.toString()}`);
 }
 
 /* ────────────────────────────────────────────────────────────────────────

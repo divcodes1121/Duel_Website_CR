@@ -16,6 +16,7 @@ import {
   type CoachChoiceDeck,
   type CoachDeck,
   type CoachLeft,
+  type CoachPattern,
   type CoachPlanDeck,
   type CoachPlanRow,
   type CoachRole,
@@ -40,6 +41,8 @@ import { Tabs } from '../ui/tabs';
 import { supabase } from '../../state/supabase';
 import { pushMetric } from '../../state/oieMetrics';
 import styles from './CoachAssist.module.css';
+import { CoachFlow, type CoachMapOpen } from './CoachFlow';
+import { MapGlyph } from './MatchupFlow/MatchupFlow';
 import { useHeldLoading } from '../../hooks/useHeldLoading';
 import { useReportRegistration } from '../../state/reportExport';
 import { isPaid, useAccess } from '../../state/gate';
@@ -450,10 +453,16 @@ function DeckRow({
   rank,
   hue,
   showProb = true,
+  onMap,
+  mapOpen = false,
 }: {
   deck: CoachDeck;
   rank?: number;
   hue: 'violet' | 'blue' | 'green' | 'pink';
+  /** Opens the matchup map on this deck (2026-11-14). */
+  onMap?: () => void;
+  /** The map is open on this deck. */
+  mapOpen?: boolean;
   /** Whether the row carries a figure at all. The Duel Prediction lists set
    *  this false — a "6% likely" beside every deck was noise there: the list is
    *  already ordered, and the rank says the same thing without asking anyone to
@@ -479,6 +488,11 @@ function DeckRow({
         <span className={styles.deckName}>
           {deck.deckName || deck.archetype}
           {deck.fill && <span className={styles.fillTag}>meta deck</span>}
+          {deck.pattern === 'play' && (
+            <span className={styles.fillTag} data-from-play="" title="Not seen in his duels: from his ranked and friendly play in this window">
+              his ladder deck
+            </span>
+          )}
           {duelPickLabel(deck) && <span className={styles.duelTag}>{duelPickLabel(deck)}</span>}
           {deck.counter && (
             <span className={styles.duelTag} data-counter={deck.origin ?? ''}>
@@ -509,6 +523,19 @@ function DeckRow({
           >
             {duelChip(deck.duel)}
           </span>
+        )}
+        {onMap && (
+          <button
+            type="button"
+            className={styles.mapButton}
+            onClick={onMap}
+            aria-pressed={mapOpen}
+            data-coach-map-deck={rank ?? ''}
+            title="Every win condition's best deck against this one, and its matchups against the rest"
+          >
+            <MapGlyph />
+            Matchups
+          </button>
         )}
       </div>
       <Strip
@@ -576,6 +603,7 @@ function DeckRow({
           three chips wrapped to two lines and made these rows taller than the
           rest. The last child of the grid, spanning from the name column on. */}
       <VsChips vs={exp?.vs} className={styles.deckRowVs} />
+      <SwitchLine deck={deck} />
     </li>
   );
 }
@@ -816,6 +844,133 @@ const LEFT_ROLES: { id: CoachRole; label: string }[] = [
   { id: 'support', label: 'Support' },
 ];
 
+/** HIS PATTERN, AS NUMBERS (2026-11-14): each win condition's chance — the
+ *  bar split into what his duels say and what his ranked and friendly play
+ *  says — then every card's chance by role over the same pattern, with what
+ *  he has already spent. Replaces the read-only "What they bring" when the
+ *  server sends it. */
+function PatternPanel({
+  pattern,
+  spent,
+  stage,
+  newDeck,
+}: {
+  pattern: CoachPattern;
+  spent?: CoachLeft['spent'];
+  stage: number;
+  /** The duel read's own chance of a deck not seen in his duels. */
+  newDeck?: number;
+}) {
+  const fams = pattern.families.filter((f) => f.share >= 0.01).slice(0, 10);
+  const top = Math.max(0.0001, ...fams.map((f) => f.share));
+  const roles = LEFT_ROLES.filter((r) => pattern.cards[r.id]?.length || spent?.[r.id]?.length);
+  return (
+    <section className={styles.block} data-hue="blue" data-pattern-panel="">
+      <h4 className={styles.blockTitle}>
+        {stage === 0 ? 'What he brings' : 'What he has left'}
+        <span className={styles.blockNote} data-pattern-split="">
+          duels {pct(pattern.seen)} · his ranked &amp; friendly play {pct(pattern.fromPlay)}
+        </span>
+        {newDeck != null && newDeck >= 0.005 && (
+          <span className={styles.blockNote} data-new-deck="">new deck {pct(newDeck)}</span>
+        )}
+      </h4>
+      <ul className={styles.patternBars}>
+        {fams.map((f) => (
+          <li
+            key={f.family}
+            className={styles.patternRow}
+            data-pattern-family={f.family}
+            title={`${f.name}: ${pct(f.share)} — duels ${pct(f.read)}, his play ${pct(f.play)} · ${f.lists} ${f.lists === 1 ? 'list' : 'lists'}`}
+          >
+            <span className={styles.barName}>{f.name}</span>
+            <span className={styles.patternTrack}>
+              <span className={styles.patternRead} style={{ width: `${(100 * f.read) / top}%` }} />
+              <span className={styles.patternPlay} style={{ width: `${(100 * f.play) / top}%` }} />
+            </span>
+            <span className={styles.barValue}>{pct(f.share)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className={styles.patternKey}>
+        <span className={styles.patternKeyRead} /> his duels
+        <span className={styles.patternKeyPlay} /> his ranked &amp; friendly play
+      </div>
+      <ul className={styles.leftRows}>
+        {roles.map((r) => (
+          <li key={r.id} className={styles.leftRow} data-role={r.id}>
+            <span className={styles.leftRole}>{r.label}</span>
+            <ul className={styles.leftCards}>
+              {(pattern.cards[r.id] ?? []).map((c) => (
+                <li key={c.card} className={styles.oddsCard}>
+                  <CardArt card={c.card} />
+                  <span className={styles.oddsValue}>{pct(c.prob)}</span>
+                </li>
+              ))}
+              {(spent?.[r.id] ?? []).map((c) => (
+                <li key={`spent-${c}`} className={`${styles.oddsCard} ${styles.leftSpent}`} data-spent="">
+                  <CardArt card={c} />
+                  <span className={styles.oddsValue}>spent</span>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** CARD SWITCHES ON A SUGGESTED DECK (2026-11-14): one-card changes real duel
+ *  players made to it, and Deckkies' builder's change, each with what it adds
+ *  against this opponent and the changed deck to take into the game. */
+function SwitchLine({ deck }: { deck: CoachDeck }) {
+  const real = deck.switches ?? [];
+  const built = deck.built;
+  if (!real.length && !built) return null;
+  return (
+    <ul className={styles.switches} data-switches="">
+      {real.map((s) => (
+        <li key={`d-${s.out}-${s.in}`} className={styles.switchRow} data-switch="duel">
+          <span className={styles.switchSource}>Duel players</span>
+          <span className={styles.swapSide}>
+            <CardArt card={s.out} variant={deck.art[s.out]} inferred={deck.inferredArt} />
+          </span>
+          <span className={styles.swapArrow} aria-label="becomes">→</span>
+          <span className={styles.swapSide}>
+            <CardArt card={s.in} variant={s.art[s.in]} inferred={s.inferredArt} />
+          </span>
+          <Delta n={s.gain} />
+          <span className={styles.switchMeta}>
+            {s.winRate.toFixed(1)}%
+            {s.players ? ` · ${s.players} ${s.players === 1 ? 'player' : 'players'}` : ''}
+          </span>
+          <DeckActions cards={s.cards} name={`${deck.deckName} (${s.in})`} size="sm" art={s.art} />
+        </li>
+      ))}
+      {built && (
+        <li className={styles.switchRow} data-switch="brain">
+          <span className={styles.switchSource}>Deckkies</span>
+          {built.swaps.map((w) => (
+            <span key={`${w.out}-${w.in}`} className={styles.switchPair}>
+              <span className={styles.swapSide}>
+                <CardArt card={w.out} variant={deck.art[w.out]} inferred={deck.inferredArt} />
+              </span>
+              <span className={styles.swapArrow} aria-label="becomes">→</span>
+              <span className={styles.swapSide}>
+                <CardArt card={w.in} variant={built.art[w.in]} inferred={built.inferredArt} />
+              </span>
+            </span>
+          ))}
+          <Delta n={built.gain} />
+          <span className={styles.switchMeta}>{built.win.toFixed(1)}%</span>
+          <DeckActions cards={built.cards} name={built.name} size="sm" art={built.art} />
+        </li>
+      )}
+    </ul>
+  );
+}
+
 function LeftPanel({ left, newDeck, stage }: { left: CoachLeft; newDeck?: number; stage: number }) {
   const rows = LEFT_ROLES.filter((r) => left.left[r.id]?.length || left.spent[r.id]?.length);
   if (!rows.length) return null;
@@ -858,6 +1013,10 @@ function DuelPrediction({ tag, days, kind }: { tag: string; days: number; kind: 
   const [data, setData] = useState<CoachPrediction | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [busy, setBusy] = useState(false);
+  /* THE MATCHUP MAP, open on one of their decks — closed by a new answer, whose
+     decks are different ones. */
+  const [map, setMap] = useState<CoachMapOpen | null>(null);
+  useEffect(() => setMap(null), [data]);
   const reading = useHeldLoading(busy);
   useReportRegistration({
     id: 'coach-predict',
@@ -1040,6 +1199,17 @@ function DuelPrediction({ tag, days, kind }: { tag: string; days: number; kind: 
           <section className={styles.block} data-hue="violet">
             <h4 className={styles.blockTitle}>
               {stage === 0 ? 'Likely opening decks' : `Likely game ${nextGame} decks`}
+              {!map && (
+                <button
+                  type="button"
+                  className={styles.mapButton}
+                  onClick={() => setMap({ side: 'their', at: 0 })}
+                  data-coach-map-open
+                >
+                  <MapGlyph />
+                  Matchup map
+                </button>
+              )}
             </h4>
             <ul className={styles.deckList}>
               {/* No per-deck percentage. The list is already in order and the
@@ -1047,18 +1217,36 @@ function DuelPrediction({ tag, days, kind }: { tag: string; days: number; kind: 
                   small numbers mid-duel. The Suggestion window keeps its
                   figures, because there the number IS the answer. */}
               {data.decks.map((d, i) => (
-                <DeckRow key={i} deck={d} rank={i + 1} hue="violet" showProb={false} />
+                <DeckRow
+                  key={i}
+                  deck={d}
+                  rank={i + 1}
+                  hue="violet"
+                  showProb={false}
+                  onMap={d.cards.length === 8 ? () => setMap({ side: 'their', at: i }) : undefined}
+                  mapOpen={map?.side === 'their' && map.at === i}
+                />
               ))}
             </ul>
+            {/* EVERY WIN CONDITION AGAINST EACH OF THEIR DECKS (2026-11-14):
+                Team Analysis's map, with the decks on the right worked out for
+                the deck of theirs it is centred on. */}
+            {map && (
+              <CoachFlow decks={data.decks} open={map} days={days} onClose={() => setMap(null)} />
+            )}
           </section>
 
           {/* SPENT AND LEFT, BY ROLE — the fitted read's own block. When it is
               here it replaces "Cards to expect": the same odds, filed under
               win conditions, spells, buildings and support, beside what the
               rules say cannot come back. */}
-          {data.left && <LeftPanel left={data.left} newDeck={data.newDeck} stage={stage} />}
+          {data.pattern ? (
+            <PatternPanel pattern={data.pattern} spent={data.left?.spent} stage={stage} newDeck={data.newDeck} />
+          ) : (
+            data.left && <LeftPanel left={data.left} newDeck={data.newDeck} stage={stage} />
+          )}
 
-          {!!data.cards?.length && !data.left && (
+          {!!data.cards?.length && !data.left && !data.pattern && (
             <div className={styles.two}>
               <section className={styles.block} data-hue="blue">
                 <h4 className={styles.blockTitle}>
@@ -1094,7 +1282,7 @@ function DuelPrediction({ tag, days, kind }: { tag: string; days: number; kind: 
             </div>
           )}
 
-          {data.left && !!data.archetypes?.length && (
+          {data.left && !data.pattern && !!data.archetypes?.length && (
             <section className={styles.block} data-hue="pink">
               <h4 className={styles.blockTitle}>Shape of the game</h4>
               <ul className={styles.barList}>
@@ -1970,6 +2158,10 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
   const [data, setData] = useState<CoachSuggestion | null>(null);
   const [error, setError] = useState<AnalyticsError | null>(null);
   const [busy, setBusy] = useState(false);
+  /* THE MATCHUP MAP (2026-11-14): open on one of their decks or one of the
+     options, drawn under the list it was opened from. A new answer closes it. */
+  const [map, setMap] = useState<{ open: CoachMapOpen; under: 'their' | 'ours' | 'yours' } | null>(null);
+  useEffect(() => setMap(null), [data]);
   const reading = useHeldLoading(busy);
   useReportRegistration({
     id: 'coach-suggest',
@@ -2220,6 +2412,20 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
 
   if (!data) return null;
   const best = data.best;
+  /* The map for this answer: their likely decks, the coached player's own
+     duel decks beside the pool, nothing sharing a card they have played, and
+     the options on screen kept on it. */
+  const mapView = (open: CoachMapOpen) => (
+    <CoachFlow
+      decks={data.opponent.decks}
+      open={open}
+      me={data.myTag}
+      myPlayed={data.myPlayed.map((d) => d.cards)}
+      keep={[...data.recommendations, ...(data.yourDecks ?? [])].map((d) => d.cards)}
+      days={days}
+      onClose={() => setMap(null)}
+    />
+  );
 
   return (
     <div className={styles.result}>
@@ -2361,18 +2567,50 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
               ? 'no duel history for them — these are current meta decks'
               : data.opponent.source === 'opponent-history+population'
                 ? 'their own decks, topped up with meta decks'
-                : 'from their own duel history'}
+                : data.opponent.source === 'opponent-play'
+                  ? 'no duels stored — from his ranked and friendly play'
+                  : data.opponent.pattern
+                    ? 'his duels and his ranked & friendly play, half each'
+                    : 'from their own duel history'}
           </span>
+          {!map && data.opponent.decks.length > 0 && (
+            <button
+              type="button"
+              className={styles.mapButton}
+              onClick={() => setMap({ open: { side: 'their', at: 0 }, under: 'their' })}
+              data-coach-map-open
+            >
+              <MapGlyph />
+              Matchup map
+            </button>
+          )}
         </h4>
         <ul className={styles.deckList}>
           {data.opponent.decks.map((d, i) => (
-            <DeckRow key={i} deck={d} rank={i + 1} hue="pink" />
+            <DeckRow
+              key={i}
+              deck={d}
+              rank={i + 1}
+              hue="pink"
+              onMap={d.cards.length === 8 ? () => setMap({ open: { side: 'their', at: i }, under: 'their' }) : undefined}
+              mapOpen={map?.open.side === 'their' && map.open.at === i}
+            />
           ))}
         </ul>
+        {map?.under === 'their' && mapView(map.open)}
       </section>
 
-      {data.opponent.left && (
-        <LeftPanel left={data.opponent.left} newDeck={data.opponent.newDeck} stage={data.stage} />
+      {data.opponent.pattern ? (
+        <PatternPanel
+          pattern={data.opponent.pattern}
+          spent={data.opponent.left?.spent}
+          stage={data.stage}
+          newDeck={data.opponent.newDeck}
+        />
+      ) : (
+        data.opponent.left && (
+          <LeftPanel left={data.opponent.left} newDeck={data.opponent.newDeck} stage={data.stage} />
+        )
       )}
 
       <section className={styles.block} data-hue="blue">
@@ -2390,10 +2628,50 @@ function Suggestion({ tag, days, kind }: { tag: string; days: number; kind: Duel
         </h4>
         <ul className={styles.deckList}>
           {data.recommendations.map((d, i) => (
-            <DeckRow key={i} deck={d} rank={i + 1} hue="blue" />
+            <DeckRow
+              key={i}
+              deck={d}
+              rank={i + 1}
+              hue="blue"
+              onMap={
+                d.cards.length === 8 && data.opponent.decks.length
+                  ? () => setMap({ open: { side: 'ours', cards: d.cards }, under: 'ours' })
+                  : undefined
+              }
+              mapOpen={map?.open.side === 'ours' && map.open.cards.join() === d.cards.join()}
+            />
           ))}
         </ul>
+        {map?.under === 'ours' && mapView(map.open)}
       </section>
+
+      {/* THE PLAYER'S OWN DUEL DECKS (2026-11-14): the list above is counters
+          first now; nothing about what this player brings is dropped. */}
+      {!!data.yourDecks?.length && (
+        <section className={styles.block} data-hue="green" data-your-decks="">
+          <h4 className={styles.blockTitle}>
+            Your own duel decks
+            <span className={styles.blockNote}>{data.yourDecks.length} in this window</span>
+          </h4>
+          <ul className={styles.deckList}>
+            {data.yourDecks.map((d, i) => (
+              <DeckRow
+                key={i}
+                deck={d}
+                rank={i + 1}
+                hue="green"
+                onMap={
+                  d.cards.length === 8 && data.opponent.decks.length
+                    ? () => setMap({ open: { side: 'ours', cards: d.cards }, under: 'yours' })
+                    : undefined
+                }
+                mapOpen={map?.under === 'yours' && map.open.side === 'ours' && map.open.cards.join() === d.cards.join()}
+              />
+            ))}
+          </ul>
+          {map?.under === 'yours' && mapView(map.open)}
+        </section>
+      )}
 
       {/* The same question, the same answer, in the window that also has to
           decide what YOU do about it. */}

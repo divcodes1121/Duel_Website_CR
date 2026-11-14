@@ -1270,9 +1270,17 @@ try:
           str(info))
     # The best set that KEEPS all of their last duel's decks: C, E, F and A beside them.
     want_last = _plan_oracle.plan([_PC, _PE, _PF, _PA], oracle_read, oracle_win)["options"][0]["duel"]
-    check("leaving out a deck of their last duel is shown against the best set that keeps them all",
-          info["last"] == {"duel": round(100 * want_last, 1), "size": 4}
-          and info["duel"] - info["last"]["duel"] >= 100 * coach.SET_MARGIN, str(info))
+    # THE LAST-DUEL RULE IS OFF BY DEFAULT SINCE 2026-11-14 ("the suggestion
+    # shows the recent decks which is played"); the rule itself still holds
+    # behind its flag.
+    check("by default their last duel's decks are not kept by rule, and nothing is compared",
+          coach.KEEP_LAST_SET is False and info["last"] is None, str(info))
+    coach.KEEP_LAST_SET = True
+    _rows_on, info_on = coach._duel_set(_MH([_PA, _PB, _PD], [_PC, _PE, _PF]), set(), S_OPP, S_HIST,
+                                        None, S_CTX, None, [], None)
+    check("(flag on) leaving out a deck of their last duel is shown against the best set that keeps them all",
+          info_on["last"] == {"duel": round(100 * want_last, 1), "size": 4}
+          and info_on["duel"] - info_on["last"]["duel"] >= 100 * coach.SET_MARGIN, str(info_on))
     # A, B, D last time; C and G are each a hair better than D. Not a point's worth.
     rows_k, info_k = coach._duel_set(_MH([_PC, _PG], [_PA, _PB, _PD]), set(), S_OPP, S_HIST, None, S_CTX,
                                      None, [], None)
@@ -1283,13 +1291,21 @@ try:
           "pd" not in [_tagof(d["cards"]) for d in free["decks"]]
           and 0 < free["value"] - kept["value"] < coach.SET_MARGIN,
           f"{[_tagof(d['cards']) for d in free['decks']]} {free['value'] - kept['value']:.4f}")
-    check("THEIR LAST DUEL'S DECKS STAY when leaving one out buys less than a point",
+    check("(flag on) THEIR LAST DUEL'S DECKS STAY when leaving one out buys less than a point",
           {"pa", "pb", "pd"} <= {_tagof(r["cards"]) for r in rows_k} and info_k["last"] is None
           and info_k["size"] == 4, str([_tagof(r["cards"]) for r in rows_k]))
+    coach.KEEP_LAST_SET = False
+    rows_off, _i = coach._duel_set(_MH([_PC, _PG], [_PA, _PB, _PD]), set(), S_OPP, S_HIST, None, S_CTX,
+                                   None, [], None)
+    check("(flag off) the composer's own best set stands: D is left out",
+          sorted(_tagof(r["cards"]) for r in rows_off) == sorted(_tagof(d["cards"]) for d in free["decks"]),
+          str([_tagof(r["cards"]) for r in rows_off]))
+    coach.KEEP_LAST_SET = True
     rows_s, info_s = coach._duel_set(_MH([_PA, _PB, _PC], [_PA, _PB, _PD]), set(), S_OPP, S_HIST, None, S_CTX,
                                      None, [], None)
     check("when their last duel's decks are all in the set there is nothing to compare",
           info_s["last"] is None and info_s["size"] == 4)
+    coach.KEEP_LAST_SET = False
     rows3, info3 = coach._duel_set(_MH([_PA, _PB, _PC]), set(), S_OPP, S_HIST, None, S_CTX, None, [], None)
     check("three decks are a set of three", info3["size"] == 3 and len(rows3) == 3 and info3["last"] is None)
     shared = _PB[:7] + [_PA[5]]                   # shares one card with A
@@ -1473,7 +1489,9 @@ try:
     rows, info = coach._counter_rows(_C_OPP, set(), fr, [], None, 15)
     got = [_tagof(r["cards"]) for r in rows]
     check("the pool is rated against the decks the read holds, by each deck's share: best first",
-          got == ["cb", "ca", "cc", "cd", "ce"], str(got))
+          got[:5] == ["cb", "ca", "cc", "cd", "ce"], str(got))
+    check("...and past the five shown, the set composer's extra counters (8 since 2026-11-14)",
+          got[5:] == ["cf"] and coach.COUNTER_SET == 8, str(got))
     check("...and the figure a row was chosen on rides with it",
           [r["counterValue"] for r in rows[:2]] == [67.5, 65.0], str([r.get("counterValue") for r in rows]))
     check("the pool asked for is the window's (the opponent's days), read once",
@@ -1529,13 +1547,15 @@ try:
                  "d1": 66.5, "d2": 66.2, "d3": 66.1}
     _with_pool(crl_pool)
     got_c = [_tagof(r["cards"]) for r in coach._counter_rows(_C_OPP, set(), _FakeRates(crl_table), [], None, 30)[0]]
-    check("THE CRL GROUP'S DUEL LISTS ARE HELD when they sit within the band of the best counter",
-          got_c == ["l1", "l2", "l3", "d1", "d2"], str(got_c))
-    check("...as many as the slots, no more", "d3" not in got_c and coach.COUNTER_DUEL_SLOTS == 2)
+    check("THE CRL GROUP'S DUEL LISTS ARE HELD AMONG THE FIVE SHOWN when within the band of the best",
+          got_c[:5] == ["l1", "l2", "l3", "d1", "d2"], str(got_c))
+    check("...as many as the slots, no more", "d3" not in got_c[:5] and coach.COUNTER_DUEL_SLOTS == 2)
+    check("...and the set's extra counters come after the five, best first",
+          got_c[5:] == ["l4", "l5", "l6"], str(got_c))
     far = dict(crl_table, d1=65.9, d2=60.0, d3=59.0)
     got_far = [_tagof(r["cards"]) for r in coach._counter_rows(_C_OPP, set(), _FakeRates(far), [], None, 30)[0]]
     check("a duel list further under the best than the band is not held over a better list",
-          got_far == ["l1", "l2", "l3", "l4", "l5"], str(got_far))
+          got_far[:5] == ["l1", "l2", "l3", "l4", "l5"], str(got_far))
 
     _with_pool(pool)
     check("no rates, rates off, nothing of theirs to rate against, or no pool: no counters and no claim",
@@ -1565,18 +1585,18 @@ def _order(rows):
     return [_tagof(r["cards"]) for r in coach._own_leads(rows)]
 
 
-check("the margin is four points of this game, two of the duel",
-      coach.COUNTER_MARGIN == 4.0 and coach._figure(_lr("k", True, brain=60.0)) == (60.0, 4.0)
-      and coach._figure(_lr("k", True, brain=60.0, duel=55.0)) == (55.0, 2.0)
-      and coach._figure(_lr("k", True, expected=58.0)) == (58.0, 4.0) and coach._figure({"cards": []}) is None)
+check("the margin is two points of this game, one of the duel (4 / 2 until 2026-11-14)",
+      coach.COUNTER_MARGIN == 2.0 and coach._figure(_lr("k", True, brain=60.0)) == (60.0, 2.0)
+      and coach._figure(_lr("k", True, brain=60.0, duel=55.0)) == (55.0, 1.0)
+      and coach._figure(_lr("k", True, expected=58.0)) == (58.0, 2.0) and coach._figure({"cards": []}) is None)
 check("a counter four points clear of the best own deck leads",
       _order([_lr("k", True, brain=60.0), _lr("a", False, brain=56.0), _lr("b", False, brain=50.0)]) == ["k", "a", "b"])
 check("A COUNTER UNDER THE MARGIN GIVES WAY to the player's best own deck, the rest in order",
-      _order([_lr("k", True, brain=59.9), _lr("j", True, brain=57.0), _lr("a", False, brain=56.0),
+      _order([_lr("k", True, brain=59.9), _lr("j", True, brain=57.0), _lr("a", False, brain=58.0),
               _lr("b", False, brain=50.0)]) == ["a", "k", "j", "b"])
 check("on duel figures the margin is the duel's",
-      _order([_lr("k", True, brain=70.0, duel=51.9), _lr("a", False, brain=50.0, duel=50.0)]) == ["a", "k"]
-      and _order([_lr("k", True, brain=70.0, duel=52.0), _lr("a", False, brain=50.0, duel=50.0)]) == ["k", "a"])
+      _order([_lr("k", True, brain=70.0, duel=50.9), _lr("a", False, brain=50.0, duel=50.0)]) == ["a", "k"]
+      and _order([_lr("k", True, brain=70.0, duel=51.0), _lr("a", False, brain=50.0, duel=50.0)]) == ["k", "a"])
 check("an own deck on top, no own deck at all, or a figure missing: the list stands",
       _order([_lr("a", False, brain=50.0), _lr("k", True, brain=49.0)]) == ["a", "k"]
       and _order([_lr("k", True, brain=50.0), _lr("j", True, brain=49.0)]) == ["k", "j"]
@@ -1602,7 +1622,9 @@ def _crow(cards):
 
 _saved_cs = (coach._dr, coach._combined_pair, coach._rec, coach._drop_event_decks)
 coach._dr, coach._combined_pair = _FakeRead(), _fake_pair3
-coach._rec = lambda md, opp, chips, snap, rates, extra=None: {**md, "expected": {"winRate": 50.0}}
+# Own decks rate 58 against what they bring: inside `OWN_BAND` of a 61 counter.
+_OWN_RATE = {"v": 58.0}
+coach._rec = lambda md, opp, chips, snap, rates, extra=None: {**md, "expected": {"winRate": _OWN_RATE["v"]}}
 coach._drop_event_decks = lambda decks: (list(decks), 0)
 try:
     o_read = lambda rev, lost: [({0: _PX, 1: _PY, 2: _PZ}[len(rev)], 1.0)] if len(rev) < 3 else []  # noqa: E731
@@ -1626,15 +1648,27 @@ try:
     # D is NOT a deck of their last duel here, so only the cost can keep it.
     mh_cost = _MH([_PD, _PE], [_PA, _PB, _PC])
     free = real_compose([list(d) for d in (_PA, _PB, _PC, _PD, _PK2)], o_value, pool=5)
-    check("(K2 instead of D is the better set by the look-ahead alone, by less than the cost)",
+    check("(K2 instead of D is the better set by the look-ahead alone, by a hair)",
           "pk2" in [_tagof(d["cards"]) for d in free["decks"]]
-          and 0 < free["value"] - o_value([_PA, _PB, _PC, _PD]) < coach.COUNTER_SET_COST,
+          and 0 < free["value"] - o_value([_PA, _PB, _PC, _PD]) < 0.02,
           f"{[_tagof(d['cards']) for d in free['decks']]} {free['value'] - o_value([_PA, _PB, _PC, _PD]):.4f}")
     rows_m, info_m = coach._duel_set(mh_cost, set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
                                      counters=[_crow(_PK2)])
-    check("A COUNTER WORTH LESS THAN ITS COST DOES NOT REPLACE ONE OF THEIR OWN DECKS",
-          sorted(_tagof(r["cards"]) for r in rows_m) == ["pa", "pb", "pc", "pd"] and info_m["counters"] == 0,
+    check("NO COST ON A COUNTER SINCE 2026-11-14: one better by a hair replaces one of their own decks",
+          coach.COUNTER_SET_COST == 0.0
+          and sorted(_tagof(r["cards"]) for r in rows_m) == ["pa", "pb", "pc", "pk2"] and info_m["counters"] == 1,
           str([_tagof(r["cards"]) for r in rows_m]))
+    _OWN_RATE["v"] = 50.0
+    rows_b, info_b = coach._duel_set(mh5, set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
+                                     counters=[_crow(_PK), _crow(_PK2), _crow(_PG)])
+    check("AN OWN DECK MORE THAN OWN_BAND UNDER THE BEST COUNTER IS NOT LOADED: the set is counters",
+          info_b is not None and info_b["pool"] == 0 and info_b["ownOffered"] == 5
+          and info_b["counters"] == info_b["size"] == 3, str(info_b))
+    rows_n = coach._duel_set(mh5, set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
+                             counters=[_crow(_PK)])
+    check("...and with too few counters and no own deck that can stand beside them, no set",
+          rows_n is None)
+    _OWN_RATE["v"] = 58.0
     rows_2, info_2 = coach._duel_set(_MH([_PA, _PB]), set(), S_OPP, S_HIST, None, S_CTX, None, [], None,
                                      counters=[_crow(_PK), _crow(_PK2)])
     check("TWO OWN DECKS AND COUNTERS ARE A SET: a player short of three duel decks gets one now",
@@ -1847,9 +1881,9 @@ try:
     leaned, _i = coach._counter_rows(_C_OPP, set(), _FakeRates(lean_table), [], None, 30,
                                      lean=lambda cards: {"lf": 0.4, "la": -0.4, "lg": 2.0}.get(_tagof(cards), 0.0))
     order = [_tagof(r["cards"]) for r in leaned]
-    check("(without a lean: the five best by the cards)", plain == ["la", "lb", "lc", "ld", "le"])
-    check("THE PLAYER'S STRONG WIN CONDITION COMES UP AND THEIR WEAK ONE GOES DOWN",
-          order[0] == "lf" and "la" not in order and set(order) == {"lf", "lb", "lc", "ld", "le"}, str(order))
+    check("(without a lean: the five shown are the best by the cards)", plain[:5] == ["la", "lb", "lc", "ld", "le"])
+    check("THE PLAYER'S STRONG WIN CONDITION COMES UP AND THEIR WEAK ONE GOES DOWN (out of the five shown)",
+          order[0] == "lf" and "la" not in order[:5] and set(order[:5]) == {"lf", "lb", "lc", "ld", "le"}, str(order))
     check("a list under the floor on its CARDS is not made a counter by skill", "lg" not in order)
     by = {_tagof(r["cards"]): r for r in leaned}
     check("a row carries both figures: what its cards rate, and what it was chosen on",
@@ -1861,7 +1895,7 @@ finally:
 _sug2 = _src[_src.index("def suggest("):_src.index("def mine_hist_pool(")]
 check("suggest hands the counters the coached player's skill, and sends both profiles",
       "lean=(lambda cards: _skill_shift(_sk, cards, None)) if _sk else None)" in _sug2
-      and '"profiles": profiles,' in _sug2 and "_annotate(list(top) + list(counters), profiles[\"mine\"])" in _sug2)
+      and '"profiles": profiles,' in _sug2 and "_annotate(list(top) + list(counters) + your_decks, profiles[\"mine\"])" in _sug2)
 check("...the brain's context carries the table for the pair, and the plan and the set read it",
       '"skill": _skills(my_tag, opp_tag)}' in _src and 'skill = ctx.get("skill")' in _src
       and "_combined_pair(model, rates, a, b, skill=skill, **kw)" in _src)
@@ -1878,6 +1912,15 @@ check("Coach Assist's rates read the card model and the balance log, like the De
       "self.fx.use_cards()" in _rt and "self.fx.balance = True" in _rt)
 check("...and a counter-pool list is never re-read from its ladder history here",
       "not in self._adopted" in _rt and "def adopt(" in _rt)
+
+print("\nown decks beside the counters (2026-11-14)")
+_q = lambda v: {"cards": [], "expected": {"winRate": v}}  # noqa: E731
+check("an own deck within OWN_BAND of the best counter stays; one further under goes",
+      [r["expected"]["winRate"] for r in coach._own_qualify([_q(57.0), _q(55.9), _q(60.0)], [_q(60.0), _q(55.0)])]
+      == [57.0, 60.0] and coach.OWN_BAND == 4.0)
+check("no counters: every own deck stays", len(coach._own_qualify([_q(10.0), _q(20.0)], [])) == 2)
+check("an own deck with no figure cannot stand beside a counter",
+      coach._own_qualify([{"cards": []}], [_q(55.0)]) == [])
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

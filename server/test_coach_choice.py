@@ -265,7 +265,7 @@ asked_lists: list = []
 try:
     coach._history = lambda tag, since=None, until=None: {"allDecks": [], "series": [],
                                                           "marks": lambda c: {}, "arch": lambda c: ""}
-    coach.opponent_next = lambda tag, played, hist=None: OPP
+    coach.opponent_next = lambda tag, played, hist=None, *rest: OPP
     coach._Rates = FakeRates
     coach._archetype = lambda cards: next((a for c, a in (("hog-rider", "hog"), ("golem", "golem"),
                                                           ("miner", "miner"), ("goblin-barrel", "bait"))

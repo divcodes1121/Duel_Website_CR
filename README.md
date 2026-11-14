@@ -4435,6 +4435,193 @@ per-list rates, map figures equal the chips, pair record reads, no page
 errors). Screenshots `testing/flow-*.png`, `testing/live-flow-*.png`.
 **In Team Analysis too (same day, `d1beca4`)**, asked: "I cannot see this feature in team analysis, both scouting report and match plan". Every opened folder: a *Likely to bring* row (now a button), a **Matchup map** button beside that heading, or any suggested deck's **Matchups** button. A match plan picks whose decks make the right-hand column (*Your side*: Squad's best, or one teammate's own list; a teammate's Matchups button opens on that teammate). The column draws ten decks, plus the one it was opened on at its own rank, with **Show all N decks** (a teammate list runs 24-29). Folder rows carry their rates BY POSITION in the folder's `threats` (`vsAt`, ~0.45 kB a row) because keyed by list it is ~2.2 kB a row, ~3.7 MB on a 12v12; `bring()` turns it back into the keyed `vsLists` the Deck Counter reads. A live 2v2 match plan grew 560 -> ~620 kB. Verified 48/48 locally on live answers (both modes, both themes, 390) and 11/11 signed in on deckkies.com. Screenshots `testing/team-flow-*.png`, `testing/live-team-flow-*.png`.
 
+### Coach Assist reads his pattern, and suggests meta and CRL duel decks first (2026-11-14)
+
+Asked for, before the matchup map shipped: *"the Coach Assist suggestion shows
+the recent decks which is played, no matter the date and time — we need the
+probability of him playing, compare with the spell etc, focus on numbers,
+patterns and what he is doing, and the deck suggestions must be meta decks,
+CRL duel decks as it will have card switches, plus Deckkies' brain card
+switch"*. Then: *"I don't want it to lose or get worse than before ... I don't
+want to lose any important info on the player"*.
+
+**What was wrong, measured on a live pair (30 days):**
+- **The five decks shown were 23% of his read.** "What they are likely to
+  bring" listed five decks with a 4-6% chance each. 52% of his read sat on his
+  other decks and 25% on "a deck not seen". Every suggestion was then rated as
+  if he could only bring those five.
+- **His real play was missing from the list.** In the window he played Goblin
+  Drill 16%, Electro Giant 16% and Battle Ram 13% (632 games), and no Electro
+  Giant or Battle Ram deck was rated against.
+- **The suggested set was mostly the player's own recent decks**, one of them
+  at 34.1% against what he brings. The counters block beside it had five
+  decks at 62-69%.
+
+**His pattern** (`coach._pattern`, `coach-pattern-1.0`): the duel read's whole
+distribution (not just its top five) plus his window's ranked and friendly
+play (`team_analysis._plays`, Team Analysis's read of a player), half each
+(`PATTERN_PLAY_WEIGHT` 0.5). It is grouped by win condition with one
+classifier. Up to eight of his decks are rated against: one list of each win
+condition first, each win condition keeping its whole share. Every card has a
+chance by role. A player with no duels stored is read off his play, instead of
+being handed the meta. On screen it replaces "What they bring" in both
+windows, as numbers:
+- win-condition bars, split into his duels and his play;
+- the four roles' cards with their chances;
+- spent cards;
+- the read's "new deck" figure.
+
+**Measured out of time** (300 players a week, each read with only the 30 days
+before the cutoff, scored on the win condition of the deck he really opened
+his next duel with). The weight was picked on the week of 28 Oct and
+confirmed on 4 Nov:
+
+| | log loss | his real win condition named first | chance it gave the real one |
+|---|---|---|---|
+| today's list (28 Oct / 4 Nov) | 2.664 / 2.923 | 11.0% / 10.3% | 15.1% / 14.4% |
+| the pattern (28 Oct / 4 Nov) | **2.312 / 2.467** | **19.3% / 18.3%** | **19.1% / 18.0%** |
+
+The exact game-1 deck was in the list rated against 62% of the time, against
+59% before. The duel read's own 12 weights were fitted on every stored duel,
+so they may have seen the test weeks; the pattern's inputs had not. A first
+lab arm compared decks under two different archetype classifiers, which
+disagree on 56% of decks, and over-stated the gain (25%). The pattern now
+files every list with `_archetype`.
+
+**Meta and CRL duel decks first:**
+- **The set and the options are counters:** CRL duel lists and the vetted /
+  top-1,000 lists, rated against the pattern. 8 counters go to the set
+  composer and 4 join the options after game 1 (were 5 and 2). The five shown
+  in the counters block keep their CRL slots.
+- **An own duel deck joins only within `OWN_BAND` (4 points) of the best
+  counter.** Their last duel's decks are no longer kept by rule
+  (`KEEP_LAST_SET`).
+- **`COUNTER_MARGIN` 2 and `COUNTER_SET_COST` 0**, the values the 2026-10-12
+  replay's sensitivity run measured at +6.7 points against +5.4 for the old
+  ones.
+
+**Card switches on every suggested deck:**
+- **Duel players** (`switches`, `_switches`): one-card changes real duel
+  players made to that list (`duel_index.near_variants`), kept only when the
+  combined brain says they add 0.5 or more.
+- **Deckkies** (`built`, `_builder_switches`): the builder's best change to
+  that deck, human swaps judged on the same engine.
+
+Each is drawn under the deck with what it adds, the new win chance, and the
+changed deck's copy / open-in-game buttons.
+
+**Nothing about the player is dropped.** Their own duel decks keep a block of
+their own, "Your own duel decks" (`yourDecks`, up to 6, rated the same way,
+each with a Matchups button). A suggested deck still carries their record with
+its win condition. The pattern panel keeps every role and the "new deck"
+figure that "What they bring" had.
+
+**Old vs new on 10 real CRL pairs (staged).** Before game 1 (after game 1 in
+brackets):
+- own decks in the list 3.0 -> 0.0 (3.0 -> 0.1);
+- counters 1.7 -> 3.7 (2.0 -> 4.0);
+- weakest suggested deck 47.2% -> 61.5% (39.9% -> 60.0%), though old and new
+  rate against different reads, so not one ruler;
+- "Play this" a counter 5 -> 10 of 10;
+- rows with a switch 0 -> 1.9 a list;
+- no deck or switch holding a spent card.
+
+**Speed:** warm, identical (12.5 s / 12.55 s for three pairs, ~4 s each). The
+first suggestion for a new pair is ~4 s slower: the Pro tuner and builder now
+start from popular meta / CRL lists, which have far more stored siblings than
+a player's own deck. Those scans are cached. The tuner reads his three
+likeliest decks (`TUNER_THEIR`), as before. Four cost 1.5 s more.
+
+**Coach Duel follows**: its AI coach is Coach Assist for its player, so its
+first set now leads with counters too (`coach_duel._side`; 109 tests green).
+
+**Tests**:
+- `server/test_coach_pattern.py` 31 (new);
+- `test_coach` 316 (pins moved: margin, cost, the last-duel rule behind its
+  flag, eight counters with the five shown unchanged);
+- `test_coach_choice` 79, `test_coach_duel` 109, `test_duel_set` 49;
+- `coachDuelRead.test.ts` (the pattern panel's no-prose rule, nothing
+  dropped);
+- 1,882 vitest.
+
+**Browser**: 20/20 twice on staged real answers (two pairs), plus the map
+(41/41). Screenshots `testing/coach-pattern-*.png`, `coach-suggest-*.png`.
+Release note `2026-11-14-coach-pattern`. **Not deployed; not seen signed in
+on deckkies.com.**
+
+### The matchup map in Coach Assist (2026-11-14)
+
+Asked for: *"the flow we built for Team Analysis, in Coach Assist — in both the
+duel prediction and the suggestion, for each deck ... all win cons' decks they
+can play against that deck and also the other remaining decks' MU%, and it will
+change the decks according to each deck, not some generalised standard decks,
+and take decks from the duel sets too"*.
+
+**What is on screen.** Every deck in *Likely opening decks* (Duel Prediction)
+and in *What they are likely to bring* (Suggestion) has a **Matchups** button,
+and each list heading has **Matchup map**. In the Suggestion, every option
+has one too. The map is Team Analysis's (`MatchupFlow`), with three
+differences:
+
+- **A node on the left is ONE DECK of theirs**, not a family. Its chance is
+  the screen's share of the decks listed.
+- **The right-hand column is worked out for the deck of theirs the map is
+  centred on.** It holds the best list of every win condition against that
+  exact deck, best rate first: ten, then *Show all* (22 win conditions in
+  the staged run). Pick another of their decks and the column changes.
+  Staged on 6 CRL opponents / 29 of their decks, the top ten shared 0-7% of
+  their lists from one deck to the next.
+- **Under each answer deck, chips give its rate against their OTHER decks**
+  (the win-condition card of that deck + the figure, coloured win / close /
+  lose). Each deck also gets a pill for where it comes from: *Yours* (the
+  coached player's own duel deck), *CRL duel*, *Top 1k*.
+
+Opened on one of your options, the map centres on that deck: each of their
+decks feeds into it. The column is the deck of theirs it plays worst, so you
+also see what else answers that one. The option sits at its own place by its
+rate against that deck.
+
+**Where the decks come from**: Team Analysis's pool (`_competitive_pool`: CRL
+duel lists + the live top 1,000's lists; 998 lists on 30 days), plus in a
+Suggestion the coached player's own duel decks (`_own_duel_decks`, up to 12)
+and the options on screen. Inside a win condition, a list is chosen on its
+rate against that deck plus the pool's CRL preference (`use_bonus`, 5 points
+plus the pilots). The player's own duel deck gets the same 5. These count only
+in the choosing, never in the printed figure. In a Suggestion, nothing that
+shares a card the player has already played this duel is offered.
+
+**The figures** are the request's `_Rates`, the fused ladder+duel rate with
+the card model and the balance log. That is the same figure as every other
+Coach Assist counter and Team Analysis's map. A deck with no measured rate
+against one of theirs has no chip and no link, never 50. **Caveat:** each
+figure is the best of up to ~40 lists of one win condition against ONE deck.
+A maximum over many noisy readings runs high (the 2026-10-12 replay put a
+counter's printed figure ~9 points over its judged one), so read the 80%s as
+"strongly favoured", not as 4 wins in 5.
+
+**Server**: `coach.answers` + route `/api/analytics/coach/answers` (`t1`..`t8`
+their decks, `w` their chances, `me`, `m1`/`m2` spent, `y1`..`y8` options,
+`days`; **route count 31**). One request answers every deck of theirs (rows
+carry `vsAt` by position, `answers` = row indices per deck), asked only when
+the map opens, cached in the browser for the visit. Staged: 0.4-2 s warm,
+36-70 kB. The first call in a process that had not built the pool took 43 s
+(live Team Analysis keeps it warm).
+
+**Files**: `utils/coachFlow.ts` (no imports beyond types),
+`components/Analytics/CoachFlow.tsx` + css, `MatchupFlow` gained `oursExtra`,
+`theirFoot` and `kicker`, and takes narrow types (`FlowFamily`, `FlowThreat`,
+`FlowDeck`). Tests `server/test_coach_answers.py` 23 (3 planted faults caught),
+`tests/coachFlow.test.ts` 11, `test_api_security` 125. Release note
+`2026-11-14-coach-matchup-map` (`needs: 'pro'`).
+
+**Verified**: 41/41 in a real browser on REAL answers. The changed `app.py` +
+`coach.py` were staged on VPS loopback with a scratch tracking DB, tunnelled
+to a local vite with no Supabase (admin). Covered: both windows, dark/light
+1440, 390 touch both themes; map figures == the server's; chips == `vsAt`;
+the column changes per deck with no second request; nothing holding a spent
+card. Screenshots `testing/coach-flow-*.png`. **Not yet deployed; not seen
+signed in on deckkies.com.**
+
 ### Deck vs Deck on both Deck Counters (2026-09-27)
 
 Asked for directly: *"Deck Counter on the main tab should also have that deck

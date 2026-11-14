@@ -158,6 +158,7 @@ class Authentication(unittest.TestCase):
                   "/api/analytics/duels/%23Y022GRCJQ",
                   "/api/analytics/coach/predict/%23Y022GRCJQ",
                   "/api/analytics/coach/opponent-read/%23Y022GRCJQ",
+                  "/api/analytics/coach/answers?t1=knight",
                   "/api/analytics/track/pending",
                   "/api/analytics/battles/%23Y022GRCJQ",
                   "/api/analytics/decks/%23Y022GRCJQ",
@@ -768,7 +769,12 @@ class RoutingUnchanged(unittest.TestCase):
         # settings and a deck clock, share its link, join, lock in blind).
         # Admin-gated like the rest of Coach Duel, and it needs to know WHICH
         # admin asks; `CoachRoomAdminGate` pins both.
-        self.assertEqual(len(routes), 30)
+        #
+        # 31 on 14 Nov 2026: `/api/analytics/coach/answers` (Coach Assist's
+        # matchup map - for each deck of theirs on screen, the best list of every
+        # win condition against THAT deck). Its own path because it rates the
+        # whole pool per deck and is only asked when the map is opened.
+        self.assertEqual(len(routes), 31)
 
     def test_only_get_and_options_are_served(self):
         served = [n for n in dir(app_module.Handler) if n.startswith("do_")]

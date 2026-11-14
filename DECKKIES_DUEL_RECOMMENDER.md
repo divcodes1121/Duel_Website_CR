@@ -1000,6 +1000,53 @@ AI's set are drawn anew (the AI composes duel 1 from its whole pool too), and
 what a pair was shown is kept in the browser, so a refresh repeats neither
 side. Each game also returns the decks still legal for your next game.
 
+### 2026-11-14 — the matchup map in Coach Assist, per deck of theirs
+
+Asked: Team Analysis's flow in both windows. Under each deck, every win
+condition's deck against it, and its MU% against the other decks. The decks
+must change with the deck, and duel decks must be used too. Built as
+`coach.answers` (one request answers every deck on screen) and `CoachFlow`
+(the map, centred on one of their decks). The column is the best list of each
+win condition against THAT deck, from the CRL duel lists + top 1,000 (Team
+Analysis's pool) + the coached player's own duel decks. Spent cards are
+excluded.
+
+Staged on 6 real CRL opponents, 29 of their decks: 22 win conditions a deck
+(16-22 at 50%+), top tens 0-7% shared from one deck to the next, 0.4-2 s warm.
+Browser 41/41 on those answers.
+
+**No new measurement of whether these picks win more.** The figures are the
+fused rate + card model, as the counters block. The best of ~40 lists against
+one deck reads high (winner's curse; the 10-12 replay found ~9 points of
+printed-over-judged on counters). Not corrected; stated in the README. A
+replay of "best answer to their real game-N deck" vs what was brought is the
+check to run before these figures are leaned on.
+
+### 2026-11-14 — his pattern, and meta / CRL duel decks first
+
+Asked: the Suggestion "shows the recent decks which is played"; it should read
+his probability of playing (win conditions, spells, patterns), and suggest meta
+and CRL duel decks with card switches (real players' and Deckkies'). Then:
+nothing may get worse, and no player info may be lost.
+
+- **The read.** The five decks listed held 23% of the read and were rescaled
+  to 100%. Now: the whole read plus his window's play (Team Analysis's
+  `_plays`), half each, by win condition. Out of time, 300 players a week,
+  picked on 28 Oct and confirmed on 4 Nov:
+  - log loss 2.923 -> 2.467;
+  - his real game-1 win condition named first 10.3% -> 18.3%.
+- **The suggestions.** Counters (CRL duel + vetted/top lists) first; an own
+  deck only within 4 points of the best counter; margin 2 / cost 0 (the 10-12
+  sensitivity values, +6.7 vs +5.4). Switches from duel players' real
+  variants and from the builder.
+- **The player's own duel decks** keep their own block (`yourDecks`).
+- **Staged, 10 CRL pairs:** own decks in the list 3.0 -> 0.0; weakest
+  suggested deck 47 -> 62% (different reads, not one ruler). Warm time equal;
+  cold +4 s on a new pair (the Pro tuner on popular lists).
+- **Not done:** a blind replay of the new suggestions by a separate judge
+  (the 10-12 rig needs pre-cut fits; hours). The read part is measured out of
+  time; the suggestion part leans on the 10-12 replay's measurements.
+
 ## Next action
 
 Steps 1 to 4, 6 and 7 are live and the part of step 5 that needed nobody is too.

@@ -1883,6 +1883,58 @@ bring" has the measurement; `DECKKIES_DUEL_RECOMMENDER.md` the whole record.
   `test_duel_set.py` 49. On a box with a trained card model the suite still
   stubs the rates.
 
+## The opponent's pattern, and counters first (`coach._pattern`, 2026-11-14)
+
+`opponent_next(..., since, until)` and `predict()`: when the window is known
+and the duel read answered (or there is no duel history), their decks are
+`_pattern(read_all, newDeck, _play_space(tag, since, until), used)`:
+- **The read:** the whole distribution, from `opening_decks` /
+  `next_decks`' internal `_all`, popped before sending.
+- **His play:** `team_analysis._own_decks` + `_plays`.
+- **The mix:** `PATTERN_PLAY_WEIGHT` 0.5 of it from play, by win condition
+  (`_archetype` + `_ta._family`).
+- **The decks rated against:** at most `PATTERN_DECKS` 8 and
+  `PATTERN_PER_FAMILY` 2. One list of each win condition comes first, each
+  win condition keeping its whole share. `p` = the true chance, `prob` = the
+  share of those listed.
+
+The answer carries `pattern` (families with read / play shares, cards by
+role, seen / fromPlay / covered). Measured out of time in README "Coach
+Assist reads his pattern".
+
+The suggestion:
+- **The set:** `_duel_set` offers `COUNTER_SET` 8 counters; own duel decks
+  only within `OWN_BAND` 4 of the best (`_own_qualify`); `KEEP_LAST_SET`
+  False; `COUNTER_SET_COST` 0.
+- **After game 1:** own options pass the same band and `COUNTER_OPTIONS` 4
+  counters join; `COUNTER_MARGIN` 2.
+- **The counters block:** `_counter_rows` picks the five shown as before, then
+  appends up to 8 for the composer.
+- **Switches:** `_switches` (`SWITCH_ROWS` 4, `SWITCH_PER_ROW` 2,
+  `SWITCH_MIN_GAIN` 0.5) and `_builder_switches` (the builder's `_kept`,
+  popped).
+- **The player's own duel decks:** `yourDecks` = `_your_decks` (6).
+- **The tuner:** reads `_head(opp decks, TUNER_THEIR 3)`.
+
+Tests `test_coach_pattern.py` 31.
+
+## Coach Assist's matchup map (`coach.answers`, 2026-11-14)
+
+`/api/analytics/coach/answers?t1..t6=<their decks>&w=<chances>&me=&m1=&m2=&y1..y8=&days=`.
+For EACH deck of theirs, the best list of every win condition (Team Analysis's
+`_family`) against that exact deck, best rate first (`answers[i]` = row
+indices, at most `ANSWER_PER_DECK` 30). Candidates: `_ta._competitive_pool(days)`
+(CRL duel lists + live top 1,000), the coached player's own duel decks
+(`_own_duel_decks`, `ANSWER_OWN_MAX` 12, origin `yours`) and the options the
+screen sends (`keep`, origin `option` unless owned). A list sharing a card
+with `m1`/`m2` is never offered. Choosing = rate + `use_bonus` (CRL) or
+`ANSWER_OWN_PREFER` 5 (own). The figure is the rate alone (`_Rates`: fused +
+card model + balance log; pool lists rated via `lean_rates` to choose, then
+`adopt` + `rate` to dress). Rows: `vsAt` = `[rate, rung, games]` per deck of
+theirs by position, null where unmeasured; `expectedWinRate` = chance-weighted
+over the rated ones (`weight`). Failures are a `reason` (`no_decks`,
+`no_engine`, `no_rates`). Tests `test_coach_answers.py` 23.
+
 ## The set composer (`duel_set.py`, 2026-10-07)
 
 Pure: `itertools`. `compose(decks, value, *, size=4, min_size=3,

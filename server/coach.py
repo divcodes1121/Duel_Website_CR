@@ -502,6 +502,8 @@ def opening_decks(tag: str, hist: dict | None = None, kind=None) -> dict:
     }
     if rows is not None:
         out.update(_read_extras(rows, [], h))
+        # THE WHOLE READ, for the pattern (`_pattern`); never sent as it is.
+        out["_all"] = rows
     return out
 
 
@@ -833,6 +835,8 @@ def next_decks(tag: str, revealed: list[list[str]],
         # More of the read than the three this window lists, for the caller
         # that weighs a recommendation against it (`opponent_next`).
         **({"pool": decks[:OPP_READ_DECKS]} if rows is not None else {}),
+        # THE WHOLE READ, for the pattern (`_pattern`); never sent as it is.
+        **({"_all": decks} if rows is not None else {}),
         "decks": shown,
         "cards": card_odds,
         "archetypes": archetype_odds,
@@ -934,8 +938,233 @@ def _fills(existing: list[dict], used: set, need: int, *,
     return out
 
 
+# ── THE OPPONENT'S PATTERN (2026-11-14) ───────────────────────────────────
+#
+# Reported on the live Suggestion: "it shows the recent decks which is played,
+# no matter the date and time — we need the probability of him playing, compare
+# with the spell etc, focus on numbers, patterns and what he is doing".
+#
+# MEASURED ON A REAL PAIR FIRST (30 days): the five decks listed under "what
+# they are likely to bring" held 23% of the read's own probability (4-6%
+# each); 52% sat on his other seen decks and 25% on "a deck not seen", and the
+# screen RESCALED THE FIVE TO 100% — every suggestion was rated as if he could
+# only bring those five. Meanwhile his window's play was Goblin Drill 16%,
+# Electro Giant 16%, Battle Ram 13% … and no Electro Giant or Battle Ram deck
+# was rated against at all.
+#
+# THE PATTERN: the read's WHOLE distribution, plus its "not seen" share spread
+# over what he plays in the window (Team Analysis's read of a player:
+# `team_analysis._plays`, ranked + friendly + duels x30, recency-weighted),
+# grouped by win condition. The decks rated against are the most likely lists
+# of each win condition, `prob` their share of the decks listed and `p` their
+# true chance; `pattern` carries the numbers (win conditions, spells and the
+# other roles, how much came from his duels and how much from his play).
+
+PATTERN_BRAIN = "coach-pattern-1.0"
+#: Their decks every suggestion is rated against, at most …
+PATTERN_DECKS = 8
+#: … and at most this many lists of one win condition among them.
+PATTERN_PER_FAMILY = 2
+#: A list under this chance is not rated against (it stays in the numbers).
+PATTERN_MIN = 0.015
+#: Cards listed per role in the numbers.
+PATTERN_CARDS = 8
+#: The share of the pattern that is his window's play (the rest the duel
+#: read). None = the read's own "not seen" share.
+#:
+#: 0.5, MEASURED OUT OF TIME (2026-11-14): 300 players a week, each read with
+#: only the 30 days before a cutoff, scored on the win condition of the deck
+#: he really opened his next duel with, over the decks rated against. Picked
+#: on the week of 28 Oct, confirmed on the week of 4 Nov:
+#:
+#:                         28 Oct                    4 Nov
+#:                 log loss  P(it)  first     log loss  P(it)  first
+#:   today's list    2.664   .151   .110        2.923   .144   .103
+#:   None (unseen)   2.370   .165   .123        2.512   .159   .120
+#:   0.4             2.302   .183   .150        2.465   .173   .143
+#:   0.5             2.312   .191   .193        2.467   .180   .183
+#:   0.75            2.517   .210   .220        2.598   .197   .210
+#:
+#: 0.4 and 0.5 tie on log loss; 0.5 names his real win condition first far
+#: more often. The exact game-1 deck was in the rated list 62% of the time
+#: against 59% before. The duel read's own fit was trained on every stored
+#: duel (its 12 weights may have seen the test week); the pattern's inputs
+#: were not.
+PATTERN_PLAY_WEIGHT = 0.5
+
+_PLAY_CACHE: dict = {}
+_PLAY_TTL_S = 120.0
+
+
+def _play_space(tag: str, since: str | None, until: str | None) -> dict | None:
+    """What `tag` plays in the window, as Team Analysis reads it: `{"threats":
+    [lists with likelihood and family], "plays": [families]}`; None when there
+    is no reader or nothing played. Cached per window like `_history`."""
+    if _ta is None or not tag:
+        return None
+    key = (tag, since, until)
+    hit = _PLAY_CACHE.get(key)
+    if hit and _now() - hit[0] < _PLAY_TTL_S:
+        return hit[1]
+    out = None
+    try:
+        got = _ta._own_decks(tag, since, until)
+        if got and got.get("decks"):
+            out = _ta._plays(got["decks"], got.get("older"))
+    except Exception:  # noqa: BLE001 - the duel read still answers
+        traceback.print_exc()
+        out = None
+    if len(_PLAY_CACHE) >= 64:
+        _PLAY_CACHE.clear()
+    _PLAY_CACHE[key] = (_now(), out)
+    return out
+
+
+def _pattern(read_rows: list[dict] | None, new_deck: float | None, play: dict | None,
+             used: set) -> dict | None:
+    """THE OPPONENT'S PATTERN (see above): `{"decks", "families", "cards",
+    "seen", "unseen", "fromPlay", "covered", "brain"}`, or None with neither a
+    read nor any play. Pure: the reads are handed in.
+
+    `read_rows` are `_read_rows`' rows (each `prob` its chance; together they
+    leave `new_deck` for a deck not seen). Without a read, his play is the
+    whole pattern. A list holding a card in `used` (already revealed) is out.
+    """
+    fam_of = (_ta._family if _ta is not None
+              else (lambda a, c: (_family_of(a, c), _family_of(a, c))))
+    lists: dict[str, dict] = {}
+    for r in read_rows or []:
+        cards = list(r.get("cards") or [])
+        p = float(r.get("prob") or 0.0)
+        if len(set(cards)) != 8 or p <= 0 or (set(cards) & used):
+            continue
+        k = _deck_key(cards)
+        # ONE CLASSIFIER FOR EVERY LIST: the duel history labels a deck with
+        # the bot's stored archetype (for a native duel row, the whole
+        # loadout's), the play read with the counter classifier, and the two
+        # disagreed on 56% of the decks a lab put side by side, so one list
+        # sat under two win conditions and its shares never met.
+        fam, name = fam_of(_archetype(cards), cards)
+        e = lists.setdefault(k, {"row": dict(r), "family": fam, "familyName": name,
+                                 "read": 0.0, "play": 0.0})
+        e["read"] += p
+    seen = sum(e["read"] for e in lists.values())
+    unseen = (max(0.0, float(new_deck or 0.0)) if read_rows else 1.0)
+    legal = [t for t in (play or {}).get("threats") or []
+             if len(set(t.get("cards") or [])) == 8 and not (set(t["cards"]) & used)
+             and float(t.get("likelihood") or 0.0) > 0]
+    tot = sum(float(t["likelihood"]) for t in legal)
+    # HOW MUCH OF THE PATTERN IS HIS PLAY: `PATTERN_PLAY_WEIGHT`, or the read's
+    # own "not seen" share when it is None; all of it with no read.
+    if not legal or tot <= 0:
+        w_play = 0.0
+    elif seen <= 0:
+        w_play = 1.0
+    elif PATTERN_PLAY_WEIGHT is None:
+        w_play = unseen / (seen + unseen) if seen + unseen > 0 else 0.0
+    else:
+        w_play = float(PATTERN_PLAY_WEIGHT)
+    if seen > 0:
+        for e in lists.values():
+            e["read"] *= (1.0 - w_play) / seen
+    if w_play > 0:
+        for t in legal:
+            cards = list(t["cards"])
+            k = _deck_key(cards)
+            arch = t.get("archetype") or _archetype(cards)
+            fam, name = fam_of(_archetype(cards), cards)
+            e = lists.get(k)
+            if e is None:
+                row = {"cards": cards, "art": t.get("art") or {}, "archetype": arch,
+                       "deckName": dz.deck_label(cards, arch),
+                       "count": int(t.get("observedCount") or 0), "pattern": "play"}
+                if t.get("artInferred"):
+                    row["inferredArt"] = True
+                e = lists[k] = {"row": row, "family": fam, "familyName": name,
+                                "read": 0.0, "play": 0.0}
+            e["play"] += w_play * float(t["likelihood"]) / tot
+    total = sum(e["read"] + e["play"] for e in lists.values())
+    if total <= 0:
+        return None
+    for e in lists.values():
+        e["w"] = (e["read"] + e["play"]) / total
+
+    fams: dict[str, dict] = {}
+    for e in lists.values():
+        f = fams.setdefault(e["family"], {"family": e["family"], "name": e["familyName"],
+                                          "share": 0.0, "read": 0.0, "play": 0.0, "lists": 0})
+        f["share"] += e["w"]
+        f["read"] += e["read"] / total
+        f["play"] += e["play"] / total
+        f["lists"] += 1
+    families = sorted(fams.values(), key=lambda f: (-f["share"], f["family"]))
+    for f in families:
+        for k in ("share", "read", "play"):
+            f[k] = round(f[k], 4)
+
+    # WIN CONDITIONS FIRST, AND EACH KEEPS ITS WHOLE SHARE. The first cut took
+    # the eight likeliest LISTS, and out of time (300 players, their next
+    # duel's game 1) the eight held 15.5% for the real win condition against
+    # 25.2% for the whole pattern: two lists of one win condition crowded out
+    # another win condition. So: one list a win condition, most likely win
+    # condition first, then second lists while there is room; each win
+    # condition's share is split over its listed lists by their own chance.
+    ranked = sorted(lists.items(), key=lambda kv: (-kv[1]["w"], kv[0]))
+    by_fam: dict[str, list[dict]] = {}
+    for _k, e in ranked:
+        by_fam.setdefault(e["family"], []).append(e)
+    order = [f["family"] for f in families]
+    chosen: list[dict] = []
+    for rnd in range(PATTERN_PER_FAMILY):
+        for f in order:
+            got = by_fam.get(f) or []
+            if len(chosen) < PATTERN_DECKS and rnd < len(got) and (
+                    rnd == 0 and fams[f]["share"] >= PATTERN_MIN or got[rnd]["w"] >= PATTERN_MIN):
+                chosen.append(got[rnd])
+    if not chosen:
+        chosen = [ranked[0][1]]
+    in_fam: dict[str, float] = {}
+    for e in chosen:
+        in_fam[e["family"]] = in_fam.get(e["family"], 0.0) + e["w"]
+    covered = sum(fams[f]["share"] for f in in_fam)
+    chosen.sort(key=lambda e: (-(fams[e["family"]]["share"] * e["w"] / in_fam[e["family"]]),
+                               _deck_key(e["row"]["cards"])))
+    decks = []
+    for e in chosen:
+        row = dict(e["row"])
+        share = fams[e["family"]]["share"] * e["w"] / in_fam[e["family"]]
+        row["p"] = round(share, 4)
+        row["prob"] = share / covered
+        row["family"], row["familyName"] = e["family"], e["familyName"]
+        row["fromPlay"] = round(e["play"] / (e["read"] + e["play"]), 3) if e["read"] + e["play"] else 0.0
+        decks.append(row)
+
+    by_role: dict[str, dict[str, float]] = {}
+    for e in lists.values():
+        for c in set(e["row"]["cards"]):
+            role = _role_of(c)
+            by_role.setdefault(role, {})
+            by_role[role][c] = by_role[role].get(c, 0.0) + e["w"]
+    cards = {role: [{"card": c, "prob": round(p, 4)}
+                    for c, p in sorted(v.items(), key=lambda kv: (-kv[1], kv[0]))[:PATTERN_CARDS]]
+             for role, v in by_role.items()}
+    return {"brain": PATTERN_BRAIN, "decks": decks, "families": families, "cards": cards,
+            "seen": round(1.0 - w_play, 4), "unseen": round(w_play, 4),
+            "fromPlay": round(sum(e["play"] for e in lists.values()) / total, 4),
+            "covered": round(covered, 4), "lists": len(lists)}
+
+
+def _public_pattern(pat: dict | None) -> dict | None:
+    """The pattern as the screen gets it: the numbers, not the decks (those
+    are the deck list itself)."""
+    if not pat:
+        return None
+    return {k: pat[k] for k in ("brain", "families", "cards", "seen", "fromPlay", "covered", "lists")}
+
+
 def opponent_next(opp_tag: str, opp_played: list[list[str]],
-                  hist: dict | None = None, kind=None) -> dict:
+                  hist: dict | None = None, kind=None,
+                  since: str | None = None, until: str | None = None) -> dict:
     """The opponent's likely next deck, as a distribution over legal decks.
 
     Their own history when there is any, meta decks otherwise, and a labelled
@@ -948,6 +1177,7 @@ def opponent_next(opp_tag: str, opp_played: list[list[str]],
     source = "population"
     extras: dict = {}
 
+    read_all = None
     if opp_tag:
         h = hist or _history(opp_tag)
         if h["allDecks"]:
@@ -957,6 +1187,19 @@ def opponent_next(opp_tag: str, opp_played: list[list[str]],
             if legal:
                 candidates, source = legal, "opponent-history"
                 extras = {k: res[k] for k in ("engine", "readFit", "newDeck", "left") if k in res}
+                read_all = res.get("_all")
+
+    # THE PATTERN (2026-11-14): the whole read plus what he plays in the
+    # window, by win condition — when the window is known (the two Coach
+    # Assist windows pass it). A player with no duel history at all is read
+    # off his own play rather than handed the meta.
+    if opp_tag and (since or until) and (read_all is not None or not candidates):
+        pat = _pattern(read_all, extras.get("newDeck"), _play_space(opp_tag, since, until), used)
+        if pat and pat["decks"]:
+            return {"decks": pat["decks"],
+                    "source": source if read_all is not None else "opponent-play",
+                    "nCandidates": pat["lists"], **extras,
+                    "pattern": _public_pattern(pat)}
 
     if not candidates:
         candidates = _legal(_population_decks(), used)
@@ -1769,7 +2012,10 @@ def _build_for_duel(ctx: dict, seeds: list[dict], rates, used: set, stage: int,
             })
         kept.sort(key=lambda r: -r["win"])
         out = {"brain": dbl.BRAIN, "decks": kept[:BUILD_SHOW],
-               "graphDecks": (sg.load() or {}).get("decks")}
+               "graphDecks": (sg.load() or {}).get("decks"),
+               # Every build kept, for the switch beside its seed
+               # (`_builder_switches`); popped before the answer is sent.
+               "_kept": kept}
 
         return out
     except Exception as exc:  # noqa: BLE001
@@ -2122,10 +2368,20 @@ COUNTER_DUEL_SLOTS = 2
 COUNTER_DUEL_BAND = 4.0
 #: Counters the set composer may draw on before a duel, and the player's own
 #: decks beside them (most recent first).
-COUNTER_SET = 5
+#:
+#: SUGGESTIONS ARE META AND CRL DUEL LISTS FIRST (2026-11-14). Reported: "the
+#: suggestion shows the recent decks which is played ... the decks suggestions
+#: must be meta decks, CRL duel decks ... + Deckkies' brain card switches".
+#: Seen on a live pair (30 days): the set was three of the player's own recent
+#: duel decks — one rated 34.1% against what the opponent brings — beside a
+#: counters block of five decks at 62-69%. 5 -> 8 counters on offer, 2 -> 4
+#: after game 1; an own deck is offered only when it rates within `OWN_BAND`
+#: of the best counter (`_own_qualify`), and their last duel's decks are no
+#: longer kept by rule (`KEEP_LAST_SET`).
+COUNTER_SET = 8
 COUNTER_SET_OWN = 6
 #: Counters that join the options once the duel has started.
-COUNTER_OPTIONS = 2
+COUNTER_OPTIONS = 4
 #: A list rated under this against what they bring is not a counter.
 COUNTER_MIN = 52.0
 #: WHAT A COUNTER MUST CLEAR THE PLAYER'S BEST OWN DECK BY to be "Play this",
@@ -2134,8 +2390,20 @@ COUNTER_MIN = 52.0
 #: reads higher than it is: the replay's judge put the counter's printed
 #: figure further above its own rating than an own deck's. Any lead from 0 to
 #: 6 points kept the whole measured gain; past 8 it starts to cost.
-COUNTER_MARGIN = 4.0
-COUNTER_SET_COST = 0.02
+#:
+#: 4.0 / 0.02 until 2026-11-14. The same replay's sensitivity run measured
+#: margin 2 and cost 0 at +6.7 points over the deck really opened against
+#: +5.4 for 4 / 0.02 (160 sides), a counter leading on 58% of them against
+#: 39%; it was not adopted then only so the constants would not be tuned to
+#: the judge. Adopted now because the account holder asked for exactly this.
+COUNTER_MARGIN = 2.0
+COUNTER_SET_COST = 0.0
+#: An own duel deck joins the set or the options only when its figure against
+#: what they bring is within this many points of the best counter's.
+OWN_BAND = 4.0
+#: Keep the decks of the player's last duel in the set unless leaving one out
+#: is worth `SET_MARGIN`. Off since 2026-11-14 (see `COUNTER_SET`).
+KEEP_LAST_SET = False
 #: Candidate sets the composer may value with counters in the pool.
 COUNTER_SET_VALUED = 600
 
@@ -2248,12 +2516,23 @@ def _counter_rows(opp: dict, used: set, rates: "_Rates | None", chips: list[dict
             break
         if raw_value >= COUNTER_MIN and c.origin == "duel" and take(value, c, raw_value):
             held += 1
+    # THE FIVE SHOWN are chosen as they always were (the CRL slots held among
+    # them); the set composer's extra counters (`COUNTER_SET`, 8 since
+    # 2026-11-14) come after them. Filling all eight in one pass pushed the
+    # held CRL lists below six ladder lists, out of the five shown.
     for value, c, raw_value in scored:
-        if len(rows) >= want:
+        if len(rows) >= COUNTER_SHOW:
             break
         if raw_value >= COUNTER_MIN:
             take(value, c, raw_value)
-    rows.sort(key=lambda r: -r["counterChosenOn"])
+    head = sorted(rows, key=lambda r: -r["counterChosenOn"])
+    rows[:] = []
+    for value, c, raw_value in scored:
+        if len(head) + len(rows) >= want:
+            break
+        if raw_value >= COUNTER_MIN and not any(_deck_key(c.cards) == _deck_key(h["cards"]) for h in head):
+            take(value, c, raw_value)
+    rows[:] = head + sorted(rows, key=lambda r: -r["counterChosenOn"])
     info = {
         "brain": COUNTER_BRAIN,
         "pool": len(pool), "rated": len(scored),
@@ -2292,6 +2571,121 @@ def _figure(row: dict) -> tuple[float, float] | None:
         if v is not None:
             return float(v), COUNTER_MARGIN
     return None
+
+
+#: Their decks the deck tuner reads (see the call in `suggest`): three, what
+#: it read before the pattern (OPP_TOP_DECKS) — four measured +1.5 s cold.
+TUNER_THEIR = 3
+#: The player's own duel decks listed beside the suggestions.
+YOUR_DECKS = 6
+
+
+def _your_decks(mine_hist: dict | None, used: set, opp: dict, chips: list[dict], snap,
+                rates, ctx: dict | None) -> list[dict]:
+    """The player's own duel decks in the window (`_own_duel_decks`, legal now,
+    event decks out), each rated like an option, with the combined brain's
+    figure when there is one. Never raises."""
+    try:
+        own, _dropped = _drop_event_decks(_own_duel_decks(mine_hist, used))
+        rows = [_rec(o, opp, chips, snap, rates, {"yours": True}) for o in own[:YOUR_DECKS]]
+        _with_brain(rows, ctx, rates)
+        return rows
+    except Exception as exc:  # noqa: BLE001
+        print("coach._your_decks: %r" % (exc,), file=sys.stderr)
+        return []
+
+
+def _head(decks: list[dict], n: int) -> list[dict]:
+    """The first `n` of their decks with `prob` renormalised over them."""
+    top = [dict(d) for d in decks[:n]]
+    total = sum(float(d.get("prob") or 0.0) for d in top)
+    if total > 0:
+        for d in top:
+            d["prob"] = float(d.get("prob") or 0.0) / total
+    return top
+
+
+def _own_qualify(rows: list[dict], counters: list[dict]) -> list[dict]:
+    """The player's own decks worth offering beside the counters: those whose
+    figure against what they bring is within `OWN_BAND` of the best counter's
+    (2026-11-14, see `COUNTER_SET`). All of them when there are no counters."""
+    best = max(((r.get("expected") or {}).get("winRate") or 0.0 for r in counters
+                if r.get("expected")), default=None)
+    if best is None:
+        return list(rows)
+    return [r for r in rows
+            if r.get("expected") and r["expected"]["winRate"] >= best - OWN_BAND]
+
+
+#: CARD SWITCHES ON THE SUGGESTED DECKS (2026-11-14): "CRL duel decks as it
+#: will have card switches + the own Deckkies brain card switch". For each of
+#: the first rows, the one-card changes real duel players made to that list
+#: (`duel_index.near_variants`) that the combined brain says help against this
+#: opponent -- `_brain`'s rule for "Play this", on every suggested deck.
+SWITCH_ROWS = 4
+SWITCH_PER_ROW = 2
+SWITCH_MIN_GAIN = 0.5
+
+
+def _switches(rows: list[dict], ctx: dict | None, rates, used: set) -> None:
+    """In place: `switches` on each of the first `SWITCH_ROWS` rows that has
+    the combined brain's figure. Never raises."""
+    if not ctx or not ctx.get("model") or not rows:
+        return
+    try:
+        import duel_model as dm
+        import duel_index as di
+    except Exception:  # noqa: BLE001
+        return
+    model, decks, kw, skill = ctx["model"], ctx["decks"], ctx["kw"], ctx.get("skill")
+    opponents = [(d["cards"], d.get("prob") or 0.0) for d in decks]
+    seat = counter.seater()
+    for r in rows[:SWITCH_ROWS]:
+        b = r.get("brain") or {}
+        if b.get("winRate") is None:
+            continue
+        try:
+            proposed = dm.swaps(model, r["cards"], di.near_variants(r["cards"]),
+                                opponents, used=used, limit=6, min_gain=0.0, **kw)
+            if proposed and rates is not None and rates.on:
+                rates.prepare([x["cards"] for x in proposed], [d["cards"] for d in decks])
+            out = []
+            for x in proposed or []:
+                e = _combined(model, rates, x["cards"], decks, kw, skill)
+                if (not e or e["sources"] != b.get("sources")
+                        or e["winRate"] - b["winRate"] < SWITCH_MIN_GAIN):
+                    continue
+                if not _constructed_ok(x["cards"], r["cards"]):
+                    continue
+                ordered, art, inferred = seat(x["cards"])
+                out.append({"out": x["out"], "in": x["in"], "cards": ordered, "art": art,
+                            "inferredArt": inferred, "winRate": e["winRate"],
+                            "gain": round(e["winRate"] - b["winRate"], 1),
+                            "games": x.get("games"), "players": x.get("players"),
+                            "source": "duel"})
+            out.sort(key=lambda y: (-y["gain"], -(y["games"] or 0)))
+            if out:
+                r["switches"] = out[:SWITCH_PER_ROW]
+        except Exception as exc:  # noqa: BLE001 - one row, not the answer
+            print("coach._switches: %r" % (exc,), file=sys.stderr)
+
+
+def _builder_switches(rows: list[dict], built: dict | None) -> None:
+    """In place: the Deckkies builder's best change to each row it started
+    from (`_build_for_duel`, human swaps judged by the combined brain), as
+    `built` on the row. Rows the builder did not start from are left alone."""
+    kept = (built or {}).pop("_kept", None) or []
+    best: dict[str, dict] = {}
+    for b in kept:
+        k = _deck_key(b.get("seed") or [])
+        if k and (k not in best or b["win"] > best[k]["win"]):
+            best[k] = b
+    for r in rows:
+        b = best.get(_deck_key(r["cards"]))
+        if b:
+            r["built"] = {"cards": b["cards"], "art": b["art"], "inferredArt": b.get("inferredArt"),
+                          "name": b["name"], "win": b["win"], "gain": b["gain"],
+                          "swaps": b["swaps"], "source": "brain"}
 
 
 def _own_leads(rows: list[dict]) -> list[dict]:
@@ -2369,6 +2763,12 @@ def _duel_set(mine_hist: dict | None, used: set, opp: dict, opp_hist: dict | Non
         extra = [r for r in (counters or [])[:COUNTER_SET]
                  if _deck_key(r["cards"]) not in own_keys]
         own = own[:COUNTER_SET_OWN if extra else _ds.POOL]
+        offered = len(own)
+        if extra:
+            # AN OWN DECK ONLY WHEN IT CAN STAND BESIDE THE COUNTERS (2026-11-14).
+            recs = [_rec(o, opp, chips, snap, rates) for o in own]
+            fit = {id(r) for r in _own_qualify(recs, extra)}
+            own = [o for o, r in zip(own, recs) if id(r) in fit]
         entries = own + extra
         if len(entries) < _ds.MIN_SIZE:
             return None
@@ -2403,7 +2803,7 @@ def _duel_set(mine_hist: dict | None, used: set, opp: dict, opp_hist: dict | Non
             i = next((i for i, r in enumerate(own) if len(set(r["cards"]) & set(d)) >= MIN_OVERLAP), None)
             if i is not None and i not in prev:
                 prev.append(i)
-        if len(prev) >= 2 and not set(prev) <= {d["index"] for d in res["decks"]}:
+        if KEEP_LAST_SET and len(prev) >= 2 and not set(prev) <= {d["index"] for d in res["decks"]}:
             kept = _ds.compose(cards, value, must=prev, pool=len(cards),
                                max_valued=COUNTER_SET_VALUED)
             if kept is not None:
@@ -2418,7 +2818,9 @@ def _duel_set(mine_hist: dict | None, used: set, opp: dict, opp_hist: dict | Non
                 # How many of the set's decks are counters from outside the
                 # player's own duel decks, and how many were on offer.
                 "counters": sum(1 for d in res["decks"] if d["index"] >= len(own)),
-                "counterPool": len(extra)}
+                "counterPool": len(extra),
+                # Own duel decks looked at, before the band kept `pool` of them.
+                "ownOffered": offered}
         return rows, info
     except Exception as exc:  # noqa: BLE001 - the options as they were still answer
         print("coach._duel_set: %r" % (exc,), file=sys.stderr)
@@ -2852,7 +3254,7 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
 
     # What they will bring. `kind` is what sort of duel this is (friendly /
     # clan war / not told) — the read is flatter for a friendly one.
-    opp = opponent_next(opp_tag, opp_played, opp_hist, kind)
+    opp = opponent_next(opp_tag, opp_played, opp_hist, kind, opp_since, opp_until)
 
     # What I can still bring. Their history-shaped pool, then the legality
     # filter, then meta fills if my own list runs short.
@@ -2965,10 +3367,14 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         # No set (the duel has started, or there is no read to compose one
         # against): the best counters stand beside the player's own options,
         # and the look-ahead may bring any of them in a later game.
-        have = {_deck_key(r["cards"]) for r in top}
-        top = list(top) + [dict(r) for r in counters[:COUNTER_OPTIONS]
-                           if _deck_key(r["cards"]) not in have]
-        plan_pool = list(mine) + [r for r in counters if _deck_key(r["cards"]) not in have]
+        # AN OWN DECK ONLY WHEN IT CAN STAND BESIDE THE COUNTERS (2026-11-14):
+        # the counters lead the list, the player's own options join them only
+        # within `OWN_BAND` of the best one.
+        own_rows = _own_qualify([r for r in top if not r.get("counter")], counters)
+        have = {_deck_key(r["cards"]) for r in own_rows}
+        extra = [dict(r) for r in counters if _deck_key(r["cards"]) not in have]
+        top = own_rows + extra[:max(COUNTER_OPTIONS, MY_TOP_DECKS - len(own_rows))]
+        plan_pool = [r for r in mine if _deck_key(r["cards"]) in have] + extra
 
     top, brain_info, brain_swaps = _brain(top, opp, my_tag, opp_tag, used_mine, rates,
                                           ctx_out=brain_ctx, ctx=ctx0)
@@ -3001,13 +3407,22 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
     if duel_plan and duel_plan.get("changed"):
         brain_swaps = []
 
+    # CARD SWITCHES ON EVERY SUGGESTED DECK (2026-11-14, `_switches`).
+    _switches(top, brain_ctx, rates, used_mine)
+
     # HOW EACH PLAYER PLAYS, IN THEIR OWN WINDOW (2026-10-12): every win
     # condition with its share of their games, their win rate with it and the
     # tag their duel record earns it. Each deck on the screen then says which
     # of the coached player's win conditions it is.
     profiles = {"mine": _win_con_profile(my_tag, my_since, my_until),
                 "opponent": _win_con_profile(opp_tag, opp_since, opp_until)}
-    _annotate(list(top) + list(counters), profiles["mine"])
+    # THE PLAYER'S OWN DUEL DECKS STAY ON THE SCREEN (2026-11-14): the list
+    # above is counters first now, and an own deck joins it only within
+    # `OWN_BAND` of the best counter; the rest are still what this player
+    # brings, and the account holder asked that nothing about a player be
+    # lost. Rated the same way, legal now, newest first.
+    your_decks = _your_decks(mine_hist, used_mine, opp, chips, snap, rates, ctx0)
+    _annotate(list(top) + list(counters) + your_decks, profiles["mine"])
 
     best = top[0] if top else None
     observed = None
@@ -3023,7 +3438,11 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
                 } for d in others],
             }
 
-    tuner_out = (tune(best["cards"], opp["decks"], used_mine, mine_hist,
+    # THE TUNER READS HIS FOUR LIKELIEST DECKS (2026-11-14). The pattern lists
+    # up to eight, and the tuner's sibling scan rates every candidate against
+    # each: staged cold, eight decks took the whole Suggestion from ~17 s to
+    # ~26 s, 14 of it in here. Four, renormalised, is what it read before.
+    tuner_out = (tune(best["cards"], _head(opp["decks"], TUNER_THEIR), used_mine, mine_hist,
                       _playstyle(my_tag, my_since, my_until, mine_hist),
                       chips, games_left=DUEL_GAMES - stage)
                  if swaps and best else None)
@@ -3040,6 +3459,7 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
                     seen_keys.add(k)
                     seeds.append({**r, "source": src})
         built = _build_for_duel(brain_ctx, seeds, rates, used_mine, stage)
+        _builder_switches(top, built)
 
     # WHAT THE COACH DUEL NEEDS TO KEEP PLAYING (`coach_duel.py`): the read of
     # the opponent, the rates and the brain context this answer was built on,
@@ -3101,6 +3521,8 @@ def suggest(my_tag: str, opp_tag: str, my_played: list[list[str]],
         "profiles": profiles,
         # One-card changes real duel players made to "Play this", that help here.
         "brainSwaps": brain_swaps,
+        # The player's own duel decks, whether or not they made the list above.
+        "yourDecks": your_decks,
         "observedLoadout": observed,
         # The opponent's real duel log for the decks they have shown — the same
         # sequence block the prediction window carries, because the question
@@ -3338,7 +3760,7 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
     snap = counter._snap()
     mine_hist = _history(my_tag, my_since, my_until) if my_tag else None
     opp_hist = _history(opp_tag, opp_since, opp_until) if opp_tag else None
-    opp = opponent_next(opp_tag, opp_played, opp_hist)
+    opp = opponent_next(opp_tag, opp_played, opp_hist, None, opp_since, opp_until)
     rates = _Rates(snap)
     duel_on = rates.duel is not None and rates.duel.on
     own, known = _own_decks(my_tag, my_since, my_until, mine_hist, rates)
@@ -3581,6 +4003,7 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
                  for r in shown if r["win"] is not None][:CHOICE_IMPROVE_SEEDS]
         built = (_build_for_duel(ctx, seeds, rates, used, stage, keep=set(want),
                                  keep_win_conditions=True) if seeds else None)
+        (built or {}).pop("_kept", None)
         shown_by = {cc.deck_key(r["cards"]): r for r in shown}
         for b in (built or {}).get("decks") or []:
             row = shown_by.get(cc.deck_key(b.get("seed") or []))
@@ -3606,6 +4029,263 @@ def chosen(my_tag: str, opp_tag: str, my_played: list[list[str]],
                                   "archetype": d.get("archetype") or ""} for d in opp["decks"]]}
     out["considered"] = len(cands)
     out["rated"] = len(rows)
+    out["seconds"] = round(time.monotonic() - t0, 2)
+    return out
+
+
+# ── THE MATCHUP MAP FOR COACH ASSIST (2026-11-14) ──────────────────────────
+#
+# Asked for: "the flow we built for Team Analysis, in Coach Assist — in both
+# the duel prediction and the suggestion, for each deck, and it will show all
+# win cons' decks they can play against that deck and also the other remaining
+# decks' MU%, and it will change the decks according to each deck, not some
+# generalised standard decks, and take decks from the duel sets too".
+#
+# So the right-hand column of the map is worked out PER DECK OF THEIRS, not
+# once for the whole read: for each deck they are likely to bring, the best
+# list of EVERY win condition against that exact deck, each carrying its rate
+# against every other deck of theirs too. The lists are Team Analysis's pool
+# (`_competitive_pool`: what the CRL group brought to duels in the window and
+# what the live top 1,000 play), the coached player's OWN duel decks (their
+# duel sets, newest first, `_own_duel_decks`) and the options the screen is
+# already showing (`keep`). Rated by the request's `_Rates` — the fused
+# ladder+duel rate with the card model and the balance log, the figure every
+# other Coach Assist counter is held to.
+#
+# CHOSEN WITHIN A WIN CONDITION BY THE RATE AGAINST THAT DECK, plus the pool's
+# own preference for a CRL duel list (`team_analysis.use_bonus`) and the same
+# for the player's own duel deck (`ANSWER_OWN_PREFER`) — in the choosing only,
+# never in the figure. Win conditions are then listed best rate first.
+
+ANSWERS_BRAIN = "coach-answers-1.0"
+#: Their decks a map is drawn for (the pattern lists up to eight, `PATTERN_DECKS`).
+ANSWER_THEIR_MAX = 8
+#: Decks the screen asks to keep on the map whatever they rate (its options).
+ANSWER_KEEP_MAX = 8
+#: The coached player's own duel decks that compete for a place.
+ANSWER_OWN_MAX = 12
+#: Win conditions listed under one deck of theirs, at most.
+ANSWER_PER_DECK = 30
+#: Points in the choosing for the player's own duel deck — the same as a CRL
+#: duel list's (`team_analysis.CRL_PREFER`): a deck they have already brought
+#: to a duel is one they can pilot.
+ANSWER_OWN_PREFER = 5.0
+
+
+def _answer_threats(decks: list[list[str]], weights: list[float]) -> list[dict]:
+    """Their decks, as the map rates them: valid eight-card lists only, each
+    once, with `likelihood` = its weight over all of them (missing weights get
+    the mean of the given ones, and none at all = equal). `at` is the deck's
+    position in what the screen sent."""
+    known = set(dx.card_keys())
+    out, seen = [], set()
+    for i, cards in enumerate(decks):
+        cards = [c for c in cards if c]
+        if len(cards) != 8 or len(set(cards)) != 8 or any(c not in known for c in cards):
+            continue
+        key = _deck_key(cards)
+        if key in seen:
+            continue
+        seen.add(key)
+        w = weights[i] if i < len(weights) else None
+        out.append({"cards": cards, "key": key, "at": i,
+                    "w": float(w) if w is not None and w > 0 else None})
+        if len(out) >= ANSWER_THEIR_MAX:
+            break
+    given = [t["w"] for t in out if t["w"]]
+    fill = sum(given) / len(given) if given else 1.0
+    for t in out:
+        t["w"] = t["w"] or fill
+    total = sum(t["w"] for t in out) or 1.0
+    for t in out:
+        a = _archetype(t["cards"])
+        t.update(archetype=a, family=t["key"], likelihood=t["w"] / total)
+    return out
+
+
+def answers(their_decks: list[list[str]], weights: list[float] | None = None, *,
+            my_tag: str = "", my_played: list[list[str]] | None = None,
+            keep: list[list[str]] | None = None, days: int | None = None,
+            since: str | None = None, until: str | None = None) -> dict:
+    """THE MATCHUP MAP'S RIGHT-HAND COLUMN, PER DECK OF THEIRS (see above).
+
+    `{"their": [{key, at, likelihood}], "decks": [row], "answers": [[row
+    index, best first] per deck of theirs], "pool": {...}, "reason"}`. Each row
+    carries `vsAt` — `[rate, rung, games]` against every deck of theirs, by
+    position, null where nothing was measured (never 50) — and `expectedWinRate`
+    over the decks it has a rate against. A deck holding a card the coached
+    player has already played this duel (`my_played`) is never offered.
+    Never raises past one deck: a failure is a `reason`.
+    """
+    t0 = time.monotonic()
+    out: dict = {"brain": ANSWERS_BRAIN, "their": [], "decks": [], "answers": [],
+                 "pool": None, "reason": None}
+    threats = _answer_threats(their_decks or [], list(weights or []))
+    if not threats:
+        out["reason"] = "no_decks"
+        return out
+    out["their"] = [{"key": t["key"], "at": t["at"], "likelihood": round(t["likelihood"], 4)}
+                    for t in threats]
+    if _ta is None:
+        out["reason"] = "no_engine"
+        return out
+    snap = counter._snap()
+    rates = _Rates(snap)
+    if not rates.on:
+        out["reason"] = "no_rates"
+        return out
+    used = set().union(*[set(d) for d in (my_played or [])]) if my_played else set()
+    n = len(threats)
+    index = {t["key"]: i for i, t in enumerate(threats)}
+
+    # THE PLAYER'S OWN DUEL DECKS AND THE SCREEN'S OPTIONS, rated first and
+    # with the family level read off their own ladder histories (`prepare`),
+    # the way every own deck on this screen is.
+    personal: dict[str, dict] = {}
+    if my_tag:
+        try:
+            hist = _history(my_tag, since, until)
+            for r in _own_duel_decks(hist, used)[:ANSWER_OWN_MAX]:
+                personal.setdefault(_deck_key(r["cards"]), {**r, "origin": "yours"})
+        except Exception:  # noqa: BLE001 - the pool still answers
+            traceback.print_exc()
+    known = set(dx.card_keys())
+    for cards in (keep or [])[:ANSWER_KEEP_MAX]:
+        cards = [c for c in cards if c]
+        if len(set(cards)) != 8 or any(c not in known for c in cards) or (set(cards) & used):
+            continue
+        k = _deck_key(cards)
+        if k in personal:
+            personal[k]["keep"] = True
+            continue
+        a = _archetype(cards)
+        personal[k] = {**dz._arranged(cards, {}), "archetype": a,
+                       "deckName": dz.deck_label(cards, a), "origin": "option", "keep": True}
+    rates.prepare([r["cards"] for r in personal.values()], [t["cards"] for t in threats])
+
+    try:
+        pool, window = _ta._competitive_pool(days or _ta.DEFAULT_DAYS)
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        pool, window = [], {}
+    if pool and rates.duel is not None and rates.duel.on:
+        rates.duel.prefetch([c.cards for c in pool])
+    table = rates.fx.threat_table(threats)
+
+    # Every candidate: (key, cards, art, inferred, archetype, origin, bonus,
+    # per-deck rates for the choosing, pool candidate or None, keep).
+    cands: dict[str, dict] = {}
+    for k, r in personal.items():
+        per: list = [None] * n
+        for i, t in enumerate(threats):
+            m = rates.rate(r["cards"], t["cards"])
+            if m:
+                per[i] = m["winRate"]
+        cands[k] = {"cards": list(r["cards"]), "art": r.get("art") or {},
+                    "inferred": bool(r.get("artInferred") or r.get("inferredArt")),
+                    "archetype": r.get("archetype") or _archetype(r["cards"]),
+                    "origin": r["origin"], "keep": bool(r.get("keep")),
+                    "bonus": ANSWER_OWN_PREFER if r["origin"] == "yours" else 0.0,
+                    "per": per, "pool": None, "count": r.get("count")}
+    for c in pool:
+        if len(set(c.cards)) != 8 or (set(c.cards) & used):
+            continue
+        per = [None] * n
+        for _like, fam, rate, _src in rates.fx.lean_rates(c, table):
+            i = index.get(fam)
+            if i is not None:
+                per[i] = rate
+        if all(v is None for v in per):
+            continue
+        hit = cands.get(c.key)
+        if hit is not None:
+            # A list the player owns that is also in the pool stays theirs,
+            # and takes the pool's preference too when that is larger.
+            hit["bonus"] = max(hit["bonus"], _ta.use_bonus(c))
+            hit["pool"] = c
+            continue
+        cands[c.key] = {"cards": list(c.cards), "art": c.art or {}, "inferred": bool(c.inferred),
+                        "archetype": c.archetype, "origin": c.origin or "meta", "keep": False,
+                        "bonus": _ta.use_bonus(c), "per": per, "pool": c, "count": None}
+
+    # THE BEST LIST OF EACH WIN CONDITION AGAINST EACH DECK OF THEIRS.
+    family_of = {k: _ta._family(v["archetype"], v["cards"]) for k, v in cands.items()}
+    picks: list[list[str]] = []
+    for i in range(n):
+        best: dict[str, tuple] = {}
+        for k, v in cands.items():
+            rate = v["per"][i]
+            if rate is None:
+                continue
+            fam = family_of[k][0]
+            score = (rate + v["bonus"], rate, k)
+            cur = best.get(fam)
+            if cur is None or (score[0], score[1]) > (cur[0], cur[1]) or (
+                    (score[0], score[1]) == (cur[0], cur[1]) and k < cur[2]):
+                best[fam] = score
+        chosen = sorted(best.values(), key=lambda s: (-s[1], s[2]))[:ANSWER_PER_DECK]
+        picks.append([s[2] for s in chosen])
+
+    # THE ROWS, dressed once each: seated with every special slot their cards
+    # can fill, and a full rate (with games) against every deck of theirs.
+    wanted = []
+    for row_keys in picks:
+        for k in row_keys:
+            if k not in wanted:
+                wanted.append(k)
+    for k, v in cands.items():
+        if v["keep"] and k not in wanted:
+            wanted.append(k)
+    rows, row_at = [], {}
+    for k in wanted:
+        v = cands[k]
+        if v["pool"] is not None:
+            rates.adopt(v["pool"])
+        vs_at, num, den = [], 0.0, 0.0
+        for i, t in enumerate(threats):
+            m = rates.rate(v["cards"], t["cards"])
+            if m:
+                vs_at.append([round(float(m["winRate"]), 1), m.get("source"), int(m.get("games") or 0)])
+                num += t["likelihood"] * float(m["winRate"])
+                den += t["likelihood"]
+            else:
+                vs_at.append(None)
+        if not den:
+            continue
+        cards, art, filled = cd.complete_seating(
+            v["cards"], v["art"], slot_of=cd.seated_positions(v["cards"], v["art"]))
+        fam_key, fam_name = family_of[k]
+        row = {"key": k, "cards": cards, "art": art, "archetype": v["archetype"],
+               "family": fam_key, "familyName": fam_name,
+               "name": dz.deck_label(cards, v["archetype"]),
+               "avgElixir": dz._avg_elixir(cards), "origin": v["origin"],
+               "expectedWinRate": round(num / den, 1), "weight": round(den, 4),
+               "vsAt": vs_at}
+        if v["inferred"]:
+            row["artInferred"] = True
+        if filled:
+            row["artFilled"] = filled
+        if v["keep"]:
+            row["keep"] = True
+        if v["count"]:
+            row["count"] = v["count"]
+        pc = v["pool"]
+        if pc is not None and getattr(pc, "crl", None):
+            row["crlPilots"] = int(pc.crl[2]) if len(pc.crl) > 2 and pc.crl[2] else 1
+        row_at[k] = len(rows)
+        rows.append(row)
+
+    # The order shown is the figure printed, read off the dressed rows.
+    for i, row_keys in enumerate(picks):
+        got = [row_at[k] for k in row_keys if k in row_at and rows[row_at[k]]["vsAt"][i]]
+        got.sort(key=lambda j: (-rows[j]["vsAt"][i][0], rows[j]["key"]))
+        out["answers"].append(got)
+    out["decks"] = rows
+    out["pool"] = {"decks": len(pool), "own": sum(1 for v in personal.values() if v["origin"] == "yours"),
+                   "rated": len(cands), "window": _ta._pool_public(window) if window else None,
+                   "cardModel": rates.fx.cm.get("brain") if rates.fx.cm is not None else None}
+    if not rows:
+        out["reason"] = "no_rates"
     out["seconds"] = round(time.monotonic() - t0, 2)
     return out
 
@@ -3649,6 +4329,20 @@ def predict(tag: str, revealed: list[list[str]],
     else:
         out.update(opening_decks(tag, hist, kind))
         out["revealed"] = []
+
+    # THE PATTERN (2026-11-14): the list is his likely decks by the whole read
+    # plus his window's play, the numbers beside it (see `_pattern`). Without
+    # the window or anything to read, the read's own list stands.
+    read_all = out.pop("_all", None)
+    out.pop("pool", None)
+    if since or until:
+        used = set().union(*[set(d) for d in revealed]) if revealed else set()
+        pat = _pattern(read_all, out.get("newDeck"), _play_space(tag, since, until), used)
+        if pat and pat["decks"] and (read_all is not None or not out.get("decks")):
+            out["decks"] = pat["decks"]
+            out["pattern"] = _public_pattern(pat)
+            if not out.get("engine"):
+                out["basis"] = "their play in the window"
 
     _observe_opponent(tag)
     return out

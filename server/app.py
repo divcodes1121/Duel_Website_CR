@@ -23,6 +23,7 @@ Endpoints
                                            (`blue` omitted = scouting report)
     GET /api/analytics/coach/predict/<tag> which decks they will bring next
     GET /api/analytics/coach/suggest       what to play, given both tags
+    GET /api/analytics/coach/answers       the matchup map: every win condition vs each of their decks
     GET /api/analytics/coach/field/<tag>   what to play against the field, no opponent
     GET /api/analytics/meta                the global leaderboard (snapshot)
     GET /api/analytics/meta/cards          global use/win rate per card, by form
@@ -1095,6 +1096,39 @@ class Handler(BaseHTTPRequestHandler):
                     except coach_room.RoomError:
                         pass
                     return self._send(body, 409)
+                return self._send(out)
+
+            if path == "/api/analytics/coach/answers":
+                # COACH ASSIST'S MATCHUP MAP (2026-11-14, `coach.answers`): for
+                # each deck of theirs the screen is showing (`t1`..`t8`, their
+                # chances in `w`), the best list of every win condition against
+                # THAT deck, each with its rate against the others. `me` adds
+                # the coached player's own duel decks and `m1`/`m2` the cards
+                # already spent this duel; `y1`..`y8` are the options on screen,
+                # kept on the map. Its own path: both windows ask it, only when
+                # the map is opened, and it rates the whole pool per deck.
+                q = parse_qs(parsed.query)
+                their = _decks(q, tuple(f"t{i}" for i in range(1, 9)))
+                if not their:
+                    return self._send({"error": "no_decks"}, 400)
+                weights = []
+                for w in (q.get("w") or [""])[0].split(","):
+                    try:
+                        weights.append(max(0.0, min(1.0, float(w))))
+                    except ValueError:
+                        weights.append(0.0)
+                me = cd.normalize_tag((q.get("me") or [""])[0]) or ""
+                if me:
+                    _note_tag(me, "coach")
+                since, until = _window(q, cd.coverage(me)) if me else (None, None)
+                try:
+                    days = max(1, min(90, int((q.get("days") or ["30"])[0])))
+                except ValueError:
+                    days = 30
+                out = coach.answers(their, weights, my_tag=me,
+                                    my_played=_decks(q, ("m1", "m2")),
+                                    keep=_decks(q, tuple(f"y{i}" for i in range(1, 9))),
+                                    days=days, since=since, until=until)
                 return self._send(out)
 
             if path == "/api/analytics/coach/suggest":

@@ -1737,3 +1737,136 @@
     justify-self: center;
   }
 }
+
+/* THE MATCHUP MAP'S DOORS (2026-11-14): under every deck of theirs and every
+   option, and beside the heading. The pill Team Analysis's map buttons wear. */
+.mapButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+  padding: 0.14rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--accent-select) 60%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-select) 12%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mapButton:hover,
+.mapButton[aria-pressed='true'] {
+  border-color: var(--accent-select);
+  background: color-mix(in srgb, var(--accent-select) 22%, transparent);
+}
+
+.blockTitle .mapButton {
+  margin: 0 0 0 auto;
+  align-self: center;
+}
+
+/* HIS PATTERN (2026-11-14): win-condition bars split into his duels (solid)
+   and his ranked & friendly play (lighter), on one scale. */
+.patternBars {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.patternRow {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr) 3rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.patternTrack {
+  display: flex;
+  height: 0.6rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-sunken);
+}
+
+.patternRead {
+  background: var(--hue-violet);
+}
+
+.patternPlay {
+  background: color-mix(in srgb, var(--hue-blue) 70%, transparent);
+}
+
+.patternKey {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.45rem 0 0.2rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.patternKeyRead,
+.patternKeyPlay {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--hue-violet);
+}
+
+.patternKeyPlay {
+  margin-left: 0.6rem;
+  background: color-mix(in srgb, var(--hue-blue) 70%, transparent);
+}
+
+/* CARD SWITCHES under a suggested deck (2026-11-14). The last line of the
+   row's grid, like the chips. */
+.switches {
+  grid-column: 2 / -1;
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.switchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+}
+
+.switchSource {
+  padding: 0.05rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--hue-green) 55%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hue-green) 12%, transparent);
+  font-size: 0.64rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.switchRow[data-switch='brain'] .switchSource {
+  border-color: color-mix(in srgb, var(--accent-select) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent-select) 12%, transparent);
+}
+
+.switchPair {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.switchMeta {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}

@@ -82,6 +82,28 @@ export interface Release {
  */
 export const RELEASES: Release[] = [
   {
+    id: '2026-11-14-coach-pattern',
+    date: '2026-11-14',
+    kind: 'improved',
+    title: 'Coach Assist: what he really plays, and meta and CRL duel decks first',
+    body: [
+      'What they are likely to bring now reads his duels and his ranked and friendly play together, by win condition, with every spell and card as a chance. Checked on 600 real players against the deck they really opened their next duel with, it names the right win condition first almost twice as often.',
+      'The decks suggested are meta and CRL duel lists first, each with the card switches duel players and Deckkies make to it. Your own player’s duel decks keep their own block below, rated the same way.',
+    ],
+    needs: 'pro',
+  },
+  {
+    id: '2026-11-14-coach-matchup-map',
+    date: '2026-11-14',
+    kind: 'new',
+    title: 'Coach Assist: a matchup map for each of their decks',
+    body: [
+      'In Duel Prediction and Suggestion, every deck they are likely to bring has a Matchups button. It opens a map with the best deck of every win condition against that exact deck, and each one shows its matchup against their other decks too.',
+      'Pick another of their decks and the answers change with it. The decks come from CRL duel lists, the top 1,000 players and, in a Suggestion, your own player’s duel decks — never one holding a card already played this duel.',
+    ],
+    needs: 'pro',
+  },
+  {
     id: '2026-11-10-crl-duel-decks-first',
     date: '2026-11-10',
     kind: 'improved',

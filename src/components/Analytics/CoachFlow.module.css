@@ -1,0 +1,88 @@
+/* Coach Assist's matchup map: the shell around Team Analysis's map, and the
+   line under each of our decks (where it comes from, and its rate against
+   their other decks). Colours are the map's own tones. */
+
+.shell {
+  margin-top: 0.75rem;
+}
+
+.note {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.close {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.step {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.origin {
+  padding: 0.05rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--accent-select) 55%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-select) 12%, transparent);
+  color: var(--text);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.origin[data-origin='yours'],
+.origin[data-origin='option'] {
+  border-color: color-mix(in srgb, var(--hue-green) 60%, var(--border));
+  background: color-mix(in srgb, var(--hue-green) 14%, transparent);
+}
+
+.vs {
+  --tone: var(--success);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.05rem 0.35rem 0.05rem 0.12rem;
+  border: 1px solid color-mix(in srgb, var(--tone) 50%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  color: var(--text);
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.vs[data-tone='even'] {
+  --tone: var(--warning);
+}
+
+.vs[data-tone='lose'] {
+  --tone: var(--error);
+}
+
+.vs img {
+  display: block;
+  width: 0.95rem;
+  height: auto;
+  border-radius: 3px;
+}

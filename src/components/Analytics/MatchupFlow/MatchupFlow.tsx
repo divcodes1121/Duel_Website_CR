@@ -1,10 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type {
-  MatchupReport,
-  PlaysFamily,
-  TeamRecommendation,
-  TeamThreat,
-} from '../../../state/analyticsClient';
+import type { MatchupReport } from '../../../state/analyticsClient';
 import { fetchMatchup } from '../../../state/analyticsClient';
 import { CardArt } from '../CardArt';
 import { DeckActions } from '../../DeckActions/DeckActions';
@@ -18,8 +13,11 @@ import {
   sourceWord,
   validFocus,
   wirePath,
+  type FlowDeck,
+  type FlowFamily,
   type FlowFocus,
   type FlowLink,
+  type FlowThreat,
   type FlowList,
   type FlowModel,
   type FlowTone,
@@ -98,12 +96,15 @@ function TheirCard({
   dim,
   port,
   onPick,
+  foot,
 }: {
   node: TheirNode;
   focused: boolean;
   dim: boolean;
   port: PortSetter;
   onPick: () => void;
+  /** Replaces the games-and-lists line (Coach Assist: one deck, not a family). */
+  foot?: string;
 }) {
   const lead = node.lists[0];
   return (
@@ -127,7 +128,7 @@ function TheirCard({
       </span>
       {lead && <Mini cards={lead.cards} art={lead.art} inferred={lead.artInferred} />}
       <span className={styles.nodeFoot}>
-        {games(node.games)} · {node.decks} {node.decks === 1 ? 'list' : 'lists'}
+        {foot ?? `${games(node.games)} · ${node.decks} ${node.decks === 1 ? 'list' : 'lists'}`}
       </span>
       <span className={styles.port} data-port="out" aria-hidden="true" />
     </button>
@@ -141,6 +142,7 @@ function OurCard({
   port,
   onPick,
   note,
+  extra,
 }: {
   node: OurNode;
   focused: boolean;
@@ -148,6 +150,8 @@ function OurCard({
   port: PortSetter;
   onPick: () => void;
   note?: string;
+  /** Drawn under the cards: Coach Assist's rates against their other decks. */
+  extra?: ReactNode;
 }) {
   const d = node.deck;
   return (
@@ -172,6 +176,7 @@ function OurCard({
         </span>
       </span>
       <Mini cards={d.cards} art={d.art} inferred={d.artInferred} filled={d.artFilled} />
+      {extra}
       {note && <span className={styles.nodeFoot}>{note}</span>}
     </button>
   );
@@ -335,7 +340,7 @@ function Detail({ model, link }: { model: FlowModel; link: FlowLink }) {
       <div className={styles.detailBody}>
         <div className={styles.detailCol} data-side="their">
           <span className={styles.colLabel}>
-            Their lists · {shareLabel(t.share)} likely
+            {t.decks === 1 && t.lists.length === 1 ? 'Their deck' : 'Their lists'} · {shareLabel(t.share)} likely
           </span>
           {link.lists.length ? (
             <ol className={styles.lists}>
@@ -375,15 +380,23 @@ export function MatchupFlow({
   onFocus,
   onClose,
   toolbar,
+  oursExtra,
+  theirFoot,
+  kicker = 'Matchup map',
 }: {
-  plays: PlaysFamily[];
-  threats?: TeamThreat[];
-  decks: TeamRecommendation[];
+  plays: FlowFamily[];
+  threats?: FlowThreat[];
+  decks: FlowDeck[];
   focus: FlowFocus | null;
   onFocus: (f: FlowFocus) => void;
   onClose?: () => void;
   /** Drawn under the header: Team Analysis's choice of whose decks to map. */
   toolbar?: ReactNode;
+  /** Drawn under each of our decks' cards, given the centre it is drawn for. */
+  oursExtra?: (deck: FlowDeck, focus: FlowFocus) => ReactNode;
+  /** The footer line of each of their decks, in place of games and lists. */
+  theirFoot?: (node: TheirNode) => string;
+  kicker?: string;
 }) {
   /* TEN DECKS ON THE RIGHT until asked for more, and back to ten whenever
      the list changes (another teammate). The deck it was opened on is always
@@ -527,7 +540,7 @@ export function MatchupFlow({
     <div className={styles.root} ref={rootRef} data-flow data-layout={wide ? 'wide' : 'narrow'}>
       <header className={styles.head}>
         <div className={styles.headText}>
-          <span className={styles.kicker}>Matchup map</span>
+          <span className={styles.kicker}>{kicker}</span>
           <h3 className={styles.title}>{centreTitle}</h3>
         </div>
         <ol className={styles.legend} aria-label="How to read the map">
@@ -596,6 +609,7 @@ export function MatchupFlow({
                   dim={focus.side === 'their' ? focus.id !== t.family : !linkFor(t.family)}
                   port={port}
                   onPick={() => pickTheir(t.family)}
+                  foot={theirFoot?.(t)}
                 />
               </div>
             ))}
@@ -624,6 +638,7 @@ export function MatchupFlow({
                   dim={focus.side === 'ours' ? focus.id !== o.id : !linkFor(o.id)}
                   port={port}
                   onPick={() => pickOurs(o.id)}
+                  extra={oursExtra?.(o.deck, focus)}
                   note={
                     focus.side === 'ours' && focus.id === o.id
                       ? 'Each matchup × how likely they bring it'
@@ -637,7 +652,7 @@ export function MatchupFlow({
           <div className={styles.stack}>
             <div className={styles.centre} ref={port('centre')}>
               {focusedTheir && (
-                <TheirCard node={focusedTheir} focused dim={false} port={port} onPick={() => undefined} />
+                <TheirCard node={focusedTheir} focused dim={false} port={port} onPick={() => undefined} foot={theirFoot?.(focusedTheir)} />
               )}
               {focusedOurs && (
                 <OurCard
@@ -646,6 +661,7 @@ export function MatchupFlow({
                   dim={false}
                   port={port}
                   onPick={() => undefined}
+                  extra={oursExtra?.(focusedOurs.deck, focus)}
                   note="Each matchup × how likely they bring it"
                 />
               )}
@@ -666,9 +682,9 @@ export function MatchupFlow({
                       onOpen={() => setOpenKey(linkKey(l))}
                     />
                     {focus.side === 'their' && other && 'deck' in other ? (
-                      <OurCard node={other} focused={false} dim={false} port={port} onPick={() => pickOurs(other.id)} />
+                      <OurCard node={other} focused={false} dim={false} port={port} onPick={() => pickOurs(other.id)} extra={oursExtra?.(other.deck, focus)} />
                     ) : other && 'family' in other ? (
-                      <TheirCard node={other} focused={false} dim={false} port={port} onPick={() => pickTheir(other.family)} />
+                      <TheirCard node={other} focused={false} dim={false} port={port} onPick={() => pickTheir(other.family)} foot={theirFoot?.(other)} />
                     ) : null}
                   </li>
                 );

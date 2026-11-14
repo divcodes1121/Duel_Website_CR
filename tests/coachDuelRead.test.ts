@@ -47,8 +47,9 @@ describe('what they have left', () => {
 
   it('is drawn in both windows, from the read', () => {
     expect(start).toBeGreaterThan(0);
-    expect(SCREEN).toMatch(/\{data\.left && <LeftPanel left=\{data\.left\}/);
-    expect(SCREEN).toMatch(/\{data\.opponent\.left && \(\s*<LeftPanel left=\{data\.opponent\.left\}/);
+    // Since 2026-11-14 it gives way to his pattern when the server sends one.
+    expect(SCREEN).toMatch(/data\.left && <LeftPanel left=\{data\.left\}/);
+    expect(SCREEN).toMatch(/data\.opponent\.left && \(\s*<LeftPanel left=\{data\.opponent\.left\}/);
   });
 
   it('files the four roles, in the order a coach plays around them', () => {
@@ -67,7 +68,26 @@ describe('what they have left', () => {
   });
 
   it('replaces the old cards table instead of sitting beside it', () => {
-    expect(SCREEN).toMatch(/\{!!data\.cards\?\.length && !data\.left && \(/);
+    expect(SCREEN).toMatch(/\{!!data\.cards\?\.length && !data\.left && !data\.pattern && \(/);
+  });
+
+  it('HIS PATTERN replaces it in both windows when the server sends one (2026-11-14)', () => {
+    expect(SCREEN).toMatch(/data\.pattern \? \(\s*<PatternPanel\s+pattern=\{data\.pattern\}/);
+    expect(SCREEN).toMatch(/data\.opponent\.pattern \? \(\s*<PatternPanel\s+pattern=\{data\.opponent\.pattern\}/);
+    // NOTHING ABOUT HIM IS DROPPED: every role's cards, and the read's own
+    // "new deck" figure, as the read's panel had them.
+    expect(SCREEN).toMatch(/LEFT_ROLES\.filter\(\(r\) => pattern\.cards\[r\.id\]/);
+    expect(SCREEN).toMatch(/newDeck=\{data\.newDeck\}/);
+    expect(SCREEN).toMatch(/newDeck=\{data\.opponent\.newDeck\}/);
+    // ... and the coached player's own duel decks keep a block of their own.
+    expect(SCREEN).toMatch(/data-your-decks/);
+    const at = SCREEN.indexOf('function PatternPanel(');
+    const block = SCREEN.slice(at, SCREEN.indexOf('\nfunction ', at + 1));
+    // Figures and card art, the same rule as the read's panel: no sentence.
+    expect(block).toMatch(/\{pct\(f\.share\)\}/);
+    expect(block).toMatch(/<span className=\{styles\.oddsValue\}>\{pct\(c\.prob\)\}<\/span>/);
+    expect(block).not.toMatch(/<p[\s>]/);
+    expect(block.slice(block.indexOf('return ('))).not.toMatch(/because|probability|weighted|based on|we think/i);
   });
 
   it('greys spent ART, never the type', () => {
